@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Зарплатный счётчик</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --card: #1a1a20;
+      --accent: #00d4aa;
+      --accent-dim: #00a88a;
+      --text: #e8e8ec;
+      --text-muted: #888;
+      --border: #2a2a32;
+      --danger: #ff6b6b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Manrope', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem; }
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+    h1 { font-size: 1.5rem; font-weight: 700; margin: 0; color: var(--text); }
+    .current-datetime {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+    h2 { font-size: 1.1rem; font-weight: 600; margin: 2rem 0 1rem; color: var(--text-muted); }
+    .add-btn {
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 10px;
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .add-btn:hover { background: var(--accent-dim); transform: translateY(-1px); }
+    .jobs-section { margin-bottom: 2rem; }
+    .jobs-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .job-card {
+      position: relative;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      position: relative;
+    }
+    .job-card .info { flex: 1; min-width: 0; padding-right: 1.5rem; }
+    .job-card .info .name-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+    .job-card .name {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      cursor: pointer;
+      display: inline-block;
+      transition: color 0.2s;
+    }
+    .job-card .name:hover { color: var(--accent); }
+    .job-card .meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; }
+    .job-card .status-badge {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      border-radius: 12px 0 0 12px;
+    }
+    .job-card.status-working .status-badge { background: var(--accent); }
+    .job-card.status-lunch .status-badge { background: #f59e0b; }
+    .job-card.status-off .status-badge { background: var(--border); }
+    .job-card .status-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.2rem 0.5rem;
+      border-radius: 6px;
+      margin-left: 0.5rem;
+    }
+    .job-card.status-working .status-label { color: var(--accent); background: rgba(0, 212, 170, 0.15); }
+    .job-card.status-lunch .status-label { color: #f59e0b; background: rgba(245, 158, 11, 0.15); }
+    .job-card.status-off .status-label { color: var(--text-muted); background: rgba(255,255,255,0.05); }
+    .job-card .remove-btn {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1.2rem;
+      line-height: 1;
+      padding: 0.2rem;
+      transition: color 0.2s;
+    }
+    .job-card .remove-btn:hover { color: var(--danger); }
+    .job-card.editing .info { display: none; }
+    .job-card.editing .remove-btn { display: none; }
+    .job-card .edit-form { display: none; }
+    .job-card.editing .edit-form { display: block; width: 100%; }
+    .edit-form {
+      width: 100%;
+      max-width: 560px;
+    }
+    .edit-form .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 1.5rem;
+      row-gap: 1rem;
+      align-items: start;
+    }
+    @media (max-width: 480px) {
+      .edit-form .form-grid { grid-template-columns: 1fr; }
+    }
+    .edit-form .form-grid .full { grid-column: 1 / -1; }
+    .edit-form .field {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 0.35rem;
+      min-width: 0;
+    }
+    .edit-form .field label:not(.chk-label) {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .edit-form input, .edit-form select {
+      padding: 0.45rem 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .edit-form input[type="number"] { min-width: 0; }
+    .edit-form .field-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .edit-form .field-row input { flex: 1; min-width: 0; }
+    .edit-form .field-row input.rate-input { flex: 1; min-width: 6.5rem; }
+    .edit-form .field-row select { flex: 0 0 auto; width: auto; min-width: 6rem; }
+    .edit-form .field-row span { color: var(--text-muted); font-size: 0.85rem; flex-shrink: 0; }
+    .edit-form .chk-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      min-height: 2.25rem;
+    }
+    .edit-form .chk-row input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; flex-shrink: 0; }
+    .edit-form .chk-row .chk-label { font-size: 0.85rem; font-weight: 400; text-transform: none; }
+    .edit-form .field.chk-only { grid-template-rows: 1fr; align-items: center; }
+    .edit-form .field-stack { display: flex; flex-direction: column; gap: 0.35rem; }
+    .edit-form .day-schedules {
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      padding: 0.6rem;
+      margin-top: 0.5rem;
+    }
+    .edit-form .day-schedules .day-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.4rem;
+      font-size: 0.8rem;
+    }
+    .edit-form .day-schedules .day-row:last-child { margin-bottom: 0; }
+    .edit-form .day-schedules .day-label { width: 2.5rem; color: var(--text-muted); }
+    .edit-form .day-schedules .day-row input { padding: 0.3rem 0.4rem; font-size: 0.8rem; }
+    .edit-form .day-schedules .day-row input[type="time"] { width: 5rem; }
+    .edit-form .btn-row { display: flex; gap: 0.5rem; margin-top: 1.25rem; }
+    .edit-form .btn-row button { padding: 0.45rem 1rem; border-radius: 6px; border: none; font-family: inherit; font-weight: 600; cursor: pointer; font-size: 0.85rem; }
+    .edit-form .save-btn { background: var(--accent); color: var(--bg); }
+    .edit-form .cancel-btn { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+    .job-card.new-job { border-style: dashed; border-color: var(--accent); background: rgba(0, 212, 170, 0.05); }
+    .job-card.new-job .edit-form { display: block; }
+    .job-card.new-job .info, .job-card.new-job .remove-btn { display: none; }
+
+    .counters-section { margin-top: 2rem; }
+    .counters-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .counters-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 1.25rem;
+      align-items: start;
+    }
+    .counter-widget {
+      aspect-ratio: 1.5;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+    .counter-widget.configuring {
+      aspect-ratio: auto;
+      min-height: 280px;
+    }
+    .counter-widget .value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: clamp(1.75rem, 4.5vw, 2.5rem);
+      font-weight: 600;
+      color: var(--accent);
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .counter-widget .value.paused { color: var(--text-muted); }
+    .counter-widget .label { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; text-align: center; }
+    .counter-widget .label-tax { font-size: 0.65rem; color: var(--text-muted); opacity: 0.8; margin-top: 0.2rem; text-align: center; }
+    .counter-widget .config-btn {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.9rem;
+      padding: 0.2rem;
+    }
+    .counter-widget .config-btn:hover { color: var(--accent); }
+    .counter-widget.configuring .value, .counter-widget.configuring .label, .counter-widget.configuring .label-tax { display: none; }
+    .counter-widget .config-form { display: none; }
+    .counter-widget.configuring .config-form { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+    .counter-widget .config-form {
+      padding: 0.25rem 0;
+      min-width: 0;
+    }
+    .counter-widget .config-form .cfg-section {
+      margin-bottom: 0.9rem;
+    }
+    .counter-widget .config-form .cfg-section:last-of-type { margin-bottom: 0; }
+    .counter-widget .config-form .cfg-label {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.4rem;
+    }
+    .counter-widget .config-form .jobs-list {
+      max-height: 110px;
+      overflow-y: auto;
+      padding: 0.5rem;
+      background: rgba(0,0,0,0.25);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .counter-widget .config-form .jobs-list::-webkit-scrollbar { width: 4px; }
+    .counter-widget .config-form .jobs-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .counter-widget .config-form .job-chk {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: color 0.15s;
+    }
+    .counter-widget .config-form .job-chk:hover { color: var(--accent); }
+    .counter-widget .config-form .job-chk input { width: 1rem; height: 1rem; margin: 0; flex-shrink: 0; accent-color: var(--accent); }
+    .counter-widget .config-form .jobs-empty { color: var(--text-muted); font-size: 0.8rem; font-style: italic; }
+    .counter-widget .config-form .cfg-row {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+    .counter-widget .config-form .cfg-row .cfg-field { flex: 1; min-width: 0; }
+    .counter-widget .config-form select {
+      width: 100%;
+      padding: 0.45rem 0.6rem;
+      font-size: 0.85rem;
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .counter-widget .config-form select:focus { outline: none; border-color: var(--accent); }
+    .counter-widget .config-form .round-chk {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .counter-widget .config-form .round-chk input { width: 1rem; height: 1rem; margin: 0; accent-color: var(--accent); }
+    .counter-widget .config-form .btn-row {
+      margin-top: auto;
+      padding-top: 0.75rem;
+      flex-shrink: 0;
+      display: flex;
+      gap: 0.5rem;
+    }
+    .counter-widget .config-form .btn-row button {
+      flex: 1;
+      min-width: 0;
+      padding: 0.5rem 0.9rem;
+      font-size: 0.85rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 600;
+    }
+    .counter-widget .config-form .save-cfg { background: var(--accent); color: var(--bg); }
+    .counter-widget .config-form .save-cfg:hover { background: var(--accent-dim); }
+    .counter-widget .config-form .del-cfg { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+    .counter-widget .config-form .del-cfg:hover { color: var(--danger); border-color: var(--danger); }
+    .counter-widget.new-counter { border-style: dashed; }
+    .counter-widget.new-counter .value { display: none; }
+    .counter-widget.new-counter .label, .counter-widget.new-counter .label-tax { display: none; }
+    .counter-widget.new-counter .config-form { display: block; }
+  </style>
+</head>
+<body>
+  <header class="page-header">
+    <h1>Зарплатный счётчик</h1>
+    <div class="current-datetime" id="currentDatetime">—</div>
+  </header>
+
+  <section class="jobs-section">
+    <h2>Работы</h2>
+    <div class="jobs-list" id="jobsList"></div>
+    <button class="add-btn" id="addJobBtn" style="margin-top: 0.75rem;">+ Добавить работу</button>
+  </section>
+
+  <section class="counters-section">
+    <div class="counters-header">
+      <h2>Счётчики</h2>
+      <button class="add-btn" id="addCounterBtn">+ Добавить виджет</button>
+    </div>
+    <div class="counters-grid" id="countersGrid"></div>
+  </section>
+
+  <script>
+    const API_BATCH = '/api/earned_batch';
+    const SCHEDULES = [{ id: '5x2', label: '5×2' }, { id: '2x2', label: '2×2' }, { id: '3x1', label: '3×1' }, { id: '1x1', label: '1×1' }, { id: '6x1', label: '6×1' }, { id: '24x7', label: '24×7' }];
+    const RATE_UNITS = [{ id: 'hour', label: 'в час' }, { id: 'day', label: 'в день' }, { id: 'month', label: 'в месяц' }];
+    const TAX_OPTIONS = [
+      { id: 'none', label: 'Уже после вычета' },
+      { id: '13', label: '13%' }, { id: '4', label: '4%' }, { id: '6', label: '6%' }, { id: '15', label: '15%' },
+    ];
+    const PERIODS = [
+      { id: 'day', label: 'С начала дня' },
+      { id: 'week', label: 'С начала недели' },
+      { id: 'month', label: 'С начала месяца' },
+      { id: 'year', label: 'С начала года' },
+    ];
+
+    const WEEKDAYS = [0,1,2,3,4];
+    const WEEKDAY_LABELS = { 0: 'Пн', 1: 'Вт', 2: 'Ср', 3: 'Чт', 4: 'Пт' };
+    const defaultJob = () => ({
+      name: '', startedAt: '', schedule: '5x2',
+      workFrom: '09:00', workTo: '17:00', lunchFrom: '13:00', lunchTo: '14:00',
+      lunchEnabled: true, daySchedules: null,
+      rate: 0, rateUnit: 'month', taxType: 'none',
+    });
+
+    let jobs = JSON.parse(localStorage.getItem('zp_jobs') || '[]');
+    jobs = jobs.map(j => {
+      const m = { ...defaultJob(), ...j };
+      if (m.salary && !m.rate) m.rate = m.salary;
+      return m;
+    });
+
+    let counters = JSON.parse(localStorage.getItem('zp_counters') || '[]');
+    counters = counters.map(c => ({ jobIds: [], taxDisplay: 'net', period: 'month', roundRubles: true, ...c }));
+
+    let jobStatuses = {};
+
+    function formatRubles(n, roundToRubles = false) {
+      if (roundToRubles) return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.floor(n)) + ' ₽';
+      return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) + ' ₽';
+    }
+
+    function formatDate(s) {
+      if (!s) return '—';
+      try {
+        const d = new Date(s);
+        return isNaN(d) ? s : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      } catch { return s; }
+    }
+
+    function formatRate(job) {
+      const u = RATE_UNITS.find(x => x.id === job.rateUnit)?.label || job.rateUnit;
+      const t = job.taxType === 'none' ? '' : ` (${job.taxType}%)`;
+      return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(job.rate) + ' ₽/' + u + t;
+    }
+
+    async function fetchEarnedBatch(jobsList) {
+      const res = await fetch(API_BATCH, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobs: jobsList })
+      });
+      const data = await res.json();
+      return data.results || [];
+    }
+
+    function buildJobEditForm(job, index, isNew) {
+      const saveLabel = isNew ? 'Добавить' : 'Сохранить';
+      const lunchEnabled = job.lunchEnabled !== false;
+      const useDaySchedules = !!(job.daySchedules && Object.keys(job.daySchedules).length);
+      const ds = job.daySchedules || {};
+      const dayRows = WEEKDAYS.map(wd => {
+        const d = ds[String(wd)] || ds[wd] || {};
+        return `<div class="day-row"><span class="day-label">${WEEKDAY_LABELS[wd]}</span>
+          <input type="time" name="day_${wd}_from" value="${d.workFrom || job.workFrom || '09:00'}">
+          <span>–</span>
+          <input type="time" name="day_${wd}_to" value="${d.workTo || job.workTo || '17:00'}">
+          ${lunchEnabled ? `<input type="time" name="day_${wd}_lunchFrom" value="${d.lunchFrom || job.lunchFrom || '13:00'}"><span>–</span><input type="time" name="day_${wd}_lunchTo" value="${d.lunchTo || job.lunchTo || '14:00'}">` : ''}
+        </div>`;
+      }).join('');
+      return `
+        <form class="edit-form" data-index="${index}">
+          <div class="form-grid">
+            <div class="field full"><label>Название</label><input type="text" name="name" value="${(job.name || '').replace(/"/g, '&quot;')}" placeholder="Название работы"></div>
+            <div class="field"><label>Дата устройства</label><input type="date" name="startedAt" value="${job.startedAt || ''}"></div>
+            <div class="field"><label>График</label><select name="schedule">${SCHEDULES.map(s => `<option value="${s.id}" ${job.schedule === s.id ? 'selected' : ''}>${s.label}</option>`).join('')}</select></div>
+            <div class="field"><label>Время работы</label><div class="field-row"><input type="time" name="workFrom" value="${job.workFrom || '09:00'}"><span>–</span><input type="time" name="workTo" value="${job.workTo || '17:00'}"></div></div>
+            <div class="field"><label>Обед</label><div class="field-stack"><div class="chk-row"><input type="checkbox" name="lunchEnabled" ${lunchEnabled ? 'checked' : ''}><span class="chk-label">Есть обед</span></div><div class="field-row"><input type="time" name="lunchFrom" value="${job.lunchFrom || '13:00'}" ${!lunchEnabled ? 'disabled' : ''}><span>–</span><input type="time" name="lunchTo" value="${job.lunchTo || '14:00'}" ${!lunchEnabled ? 'disabled' : ''}></div></div></div>
+            <div class="field full chk-only"><div class="chk-row"><input type="checkbox" name="useDaySchedules" ${useDaySchedules ? 'checked' : ''}><span class="chk-label">Разное время по дням (5×2)</span></div></div>
+            <div class="field full day-schedules-block" style="display:${useDaySchedules ? 'block' : 'none'}"><div class="day-schedules">${dayRows}</div></div>
+            <div class="field"><label>Ставка</label><div class="field-row"><input type="number" class="rate-input" name="rate" value="${job.rate || ''}" min="0" step="0.01" placeholder="0"><select name="rateUnit">${RATE_UNITS.map(u => `<option value="${u.id}" ${job.rateUnit === u.id ? 'selected' : ''}>${u.label}</option>`).join('')}</select></div></div>
+            <div class="field"><label>Налог</label><select name="taxType">${TAX_OPTIONS.map(t => `<option value="${t.id}" ${job.taxType === t.id ? 'selected' : ''}>${t.label}</option>`).join('')}</select></div>
+          </div>
+          <div class="btn-row"><button type="submit" class="save-btn">${saveLabel}</button><button type="button" class="cancel-btn">Отмена</button></div>
+        </form>
+      `;
+    }
+
+    async function updateJobStatuses() {
+      if (jobs.length === 0) return;
+      try {
+        const results = await fetchEarnedBatch(jobs);
+        results.forEach((r, i) => { jobStatuses[i] = r.work_status || 'off'; });
+        document.querySelectorAll('.job-card').forEach((card, i) => {
+          if (card.classList.contains('editing')) return;
+          const s = jobStatuses[i] || 'off';
+          card.classList.remove('status-working', 'status-lunch', 'status-off');
+          card.classList.add('status-' + s);
+          const label = card.querySelector('.status-label');
+          if (label) label.textContent = { working: 'Работаю', lunch: 'Обед', off: 'Вне работы' }[s];
+        });
+      } catch (_) {}
+    }
+
+    function renderJobs() {
+      const el = document.getElementById('jobsList');
+      el.innerHTML = '';
+      jobs.forEach((job, i) => {
+        const div = document.createElement('div');
+        div.className = 'job-card status-' + (jobStatuses[i] || 'off') + (job._new ? ' new-job editing' : '');
+        div.dataset.index = i;
+        const name = job.name || `Работа ${i + 1}`;
+        const status = jobStatuses[i] || 'off';
+        const statusLabels = { working: 'Работаю', lunch: 'Обед', off: 'Вне работы' };
+        div.innerHTML = `
+          <div class="status-badge"></div>
+          <button class="remove-btn" data-remove="${i}" title="Удалить">×</button>
+          <div class="info">
+            <div class="name-row">
+              <span class="name" data-edit="${i}">${name.replace(/</g, '&lt;')}</span>
+              <span class="status-label">${statusLabels[status]}</span>
+            </div>
+            <div class="meta">
+              <span>📅 ${formatDate(job.startedAt)}</span>
+              <span>📋 ${SCHEDULES.find(s => s.id === job.schedule)?.label || job.schedule}</span>
+              <span>🕐 ${job.schedule === '24x7' ? '24×7 (ежесекундно)' : `${job.workFrom || '09:00'}–${job.workTo || '17:00'}${job.lunchEnabled !== false ? ` (обед ${job.lunchFrom || '13:00'}–${job.lunchTo || '14:00'})` : ' (без обеда)'}`}</span>
+              <span>💰 ${formatRate(job)}</span>
+            </div>
+          </div>
+          <div class="edit-form">${buildJobEditForm(job, i, false)}</div>
+        `;
+        el.appendChild(div);
+      });
+    }
+
+    function renderCounters() {
+      const el = document.getElementById('countersGrid');
+      el.innerHTML = '';
+      counters.forEach((cfg, i) => {
+        const div = document.createElement('div');
+        div.className = 'counter-widget' + (cfg._new ? ' new-counter configuring' : '');
+        div.dataset.index = i;
+        const periodLabel = PERIODS.find(p => p.id === cfg.period)?.label || cfg.period;
+        const jobsLabel = cfg.jobIds.length === 0 ? '—' : cfg.jobIds.map(id => jobs[id]?.name || `Работа ${id + 1}`).join(', ');
+        div.innerHTML = `
+          <button class="config-btn" data-config="${i}" title="Настроить">⚙</button>
+          <div class="value" data-value="${i}">0 ₽</div>
+          <div class="label">${periodLabel} · ${jobsLabel}</div>
+          <div class="label-tax">${cfg.taxDisplay === 'gross' ? 'До вычетов' : 'После вычетов'}</div>
+          <div class="config-form">
+            <div class="cfg-section">
+              <div class="cfg-label">Работы</div>
+              <div class="jobs-list" data-jobs="${i}">${jobs.length ? jobs.map((j, idx) => `<label class="job-chk"><input type="checkbox" value="${idx}" ${(cfg.jobIds || []).includes(idx) ? 'checked' : ''}> ${(j.name || 'Работа ' + (idx + 1)).replace(/</g, '&lt;')}</label>`).join('') : '<span class="jobs-empty">Добавьте работы выше</span>'}</div>
+            </div>
+            <div class="cfg-section">
+              <div class="cfg-label">Период и отображение</div>
+              <div class="cfg-row">
+                <div class="cfg-field"><select data-period="${i}">${PERIODS.map(p => `<option value="${p.id}" ${cfg.period === p.id ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
+                <div class="cfg-field"><select data-tax="${i}"><option value="net" ${cfg.taxDisplay === 'net' ? 'selected' : ''}>После вычета</option><option value="gross" ${cfg.taxDisplay === 'gross' ? 'selected' : ''}>До вычета</option></select></div>
+              </div>
+            </div>
+            <div class="cfg-section">
+              <label class="round-chk"><input type="checkbox" data-round="${i}" ${cfg.roundRubles !== false ? 'checked' : ''}> Округлять до рублей</label>
+            </div>
+            <div class="btn-row"><button class="save-cfg" data-save="${i}">Готово</button><button class="del-cfg" data-del="${i}">Удалить</button></div>
+          </div>
+        `;
+        el.appendChild(div);
+      });
+    }
+
+    function getCounterValue(cfg) {
+      const jobList = (cfg.jobIds || []).map(id => jobs[id]).filter(Boolean);
+      if (jobList.length === 0) return Promise.resolve({ value: 0, isWorking: false });
+      return fetchEarnedBatch(jobList).then(results => {
+        const key = cfg.taxDisplay === 'gross' ? `earned_gross_${cfg.period}` : `earned_${cfg.period}`;
+        const value = results.reduce((s, r) => s + (r[key] || 0), 0);
+        const isWorking = results.some(r => r.is_working_now);
+        return { value, isWorking };
+      });
+    }
+
+    const animValues = {};
+    function animateCounter(idx, targetVal, roundRubles) {
+      const el = document.querySelector(`.counter-widget[data-index="${idx}"] .value`);
+      if (!el) return;
+      const prev = animValues[idx] ?? targetVal;
+      animValues[idx] = targetVal;
+      if (roundRubles) {
+        const from = Math.floor(prev);
+        const to = Math.floor(targetVal);
+        if (from === to) {
+          el.textContent = formatRubles(from, true);
+          return;
+        }
+        const start = performance.now();
+        const rublesDiff = Math.abs(to - from);
+        const dur = Math.min(1000 * rublesDiff, 3000);
+        function tick(now) {
+          const t = Math.min((now - start) / dur, 1);
+          const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+          const v = from + (to - from) * eased;
+          el.textContent = formatRubles(Math.floor(v), true);
+          if (t < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      } else {
+        el.textContent = formatRubles(targetVal, false);
+      }
+    }
+
+    function tickCounters() {
+      counters.forEach((cfg, i) => {
+        if (cfg._new || document.querySelector(`.counter-widget[data-index="${i}"]`)?.classList.contains('configuring')) return;
+        getCounterValue(cfg).then(({ value, isWorking }) => {
+          animateCounter(i, value, cfg.roundRubles !== false);
+          const el = document.querySelector(`.counter-widget[data-index="${i}"] .value`);
+          if (el) el.classList.toggle('paused', !isWorking);
+        });
+      });
+    }
+
+    document.getElementById('jobsList').addEventListener('click', (e) => {
+      const editIdx = e.target.dataset?.edit;
+      const removeIdx = e.target.dataset?.remove;
+      if (editIdx !== undefined) {
+        const card = document.querySelector(`.job-card[data-index="${editIdx}"]`);
+        if (card) {
+          card.classList.add('editing');
+          card.querySelector('.cancel-btn').onclick = () => { card.classList.remove('editing'); };
+          const form = card.querySelector('.edit-form');
+          const setupFormToggles = () => {
+            const lunchChk = form.querySelector('[name=lunchEnabled]');
+            const useDaysChk = form.querySelector('[name=useDaySchedules]');
+            const dayBlock = form.querySelector('.day-schedules-block');
+            const toggleLunch = () => { form.querySelectorAll('input[name=lunchFrom],input[name=lunchTo],input[name*=lunchFrom],input[name*=lunchTo]').forEach(i => { i.disabled = !lunchChk.checked; }); };
+            const toggleDays = () => { if (dayBlock) dayBlock.style.display = useDaysChk.checked ? 'block' : 'none'; };
+            lunchChk?.addEventListener('change', toggleLunch);
+            useDaysChk?.addEventListener('change', toggleDays);
+          };
+          if (form && !form._togglesSet) { setupFormToggles(); form._togglesSet = true; }
+        }
+      }
+      if (removeIdx !== undefined) {
+        jobs.splice(+removeIdx, 1);
+        saveAndRender();
+      }
+    });
+
+    document.getElementById('jobsList').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const form = e.target;
+      if (!form.classList.contains('edit-form')) return;
+      const idx = +form.dataset.index;
+      const fd = new FormData(form);
+      const useDaySchedules = form.querySelector('[name=useDaySchedules]')?.checked;
+      let daySchedules = null;
+      if (useDaySchedules) {
+        daySchedules = {};
+        WEEKDAYS.forEach(wd => {
+          const from = fd.get(`day_${wd}_from`);
+          const to = fd.get(`day_${wd}_to`);
+          const lf = fd.get(`day_${wd}_lunchFrom`);
+          const lt = fd.get(`day_${wd}_lunchTo`);
+          if (from && to) {
+            daySchedules[String(wd)] = {
+              workFrom: from || '09:00',
+              workTo: to || '17:00',
+              lunchFrom: lf || '13:00',
+              lunchTo: lt || '14:00',
+              lunchEnabled: form.querySelector('[name=lunchEnabled]')?.checked ?? true,
+            };
+          }
+        });
+      }
+      const job = {
+        name: fd.get('name') || '',
+        startedAt: fd.get('startedAt') || '',
+        schedule: fd.get('schedule') || '5x2',
+        workFrom: fd.get('workFrom') || '09:00',
+        workTo: fd.get('workTo') || '17:00',
+        lunchFrom: fd.get('lunchFrom') || '13:00',
+        lunchTo: fd.get('lunchTo') || '14:00',
+        lunchEnabled: form.querySelector('[name=lunchEnabled]')?.checked !== false,
+        daySchedules,
+        rate: parseFloat(String(fd.get('rate')).replace(',', '.')) || 0,
+        rateUnit: fd.get('rateUnit') || 'month',
+        taxType: fd.get('taxType') || 'none',
+      };
+      if (idx >= jobs.length) jobs.push(job);
+      else jobs[idx] = job;
+      delete job._new;
+      form.closest('.job-card')?.classList.remove('editing', 'new-job');
+      saveAndRender();
+    });
+
+    document.getElementById('countersGrid').addEventListener('click', (e) => {
+      const cfgIdx = e.target.dataset?.config;
+      const saveIdx = e.target.dataset?.save;
+      const delIdx = e.target.dataset?.del;
+      if (cfgIdx !== undefined) {
+        const w = document.querySelector(`.counter-widget[data-index="${cfgIdx}"]`);
+        if (w) w.classList.toggle('configuring');
+      }
+      if (saveIdx !== undefined) {
+        const w = document.querySelector(`.counter-widget[data-index="${saveIdx}"]`);
+        if (!w) return;
+        const jobsContainer = w.querySelector(`.jobs-list[data-jobs="${saveIdx}"]`);
+        const taxSelect = w.querySelector(`select[data-tax="${saveIdx}"]`);
+        const periodSelect = w.querySelector(`select[data-period="${saveIdx}"]`);
+        const roundChk = w.querySelector(`input[data-round="${saveIdx}"]`);
+        counters[saveIdx] = {
+          jobIds: Array.from(jobsContainer?.querySelectorAll('input[type=checkbox]:checked') ?? []).map(cb => +cb.value).filter(id => id >= 0 && id < jobs.length),
+          taxDisplay: taxSelect?.value || 'net',
+          period: periodSelect?.value || 'month',
+          roundRubles: roundChk?.checked ?? true,
+        };
+        delete counters[saveIdx]._new;
+        w.classList.remove('configuring', 'new-counter');
+        saveAndRender();
+      }
+      if (delIdx !== undefined) {
+        counters.splice(+delIdx, 1);
+        saveAndRender();
+      }
+    });
+
+    function saveAndRender() {
+      localStorage.setItem('zp_jobs', JSON.stringify(jobs));
+      localStorage.setItem('zp_counters', JSON.stringify(counters.map(c => ({ ...c, _new: undefined }))));
+      renderJobs();
+      renderCounters();
+      tickCounters();
+    }
+
+    document.getElementById('addJobBtn').onclick = () => {
+      jobs.push({ ...defaultJob(), _new: true });
+      saveAndRender();
+      const card = document.querySelector(`.job-card[data-index="${jobs.length - 1}"]`);
+      if (card) {
+        card.querySelector('.cancel-btn').onclick = () => {
+          jobs.pop();
+          saveAndRender();
+        };
+        const form = card.querySelector('.edit-form');
+        if (form && !form._togglesSet) {
+          const lunchChk = form.querySelector('[name=lunchEnabled]');
+          const useDaysChk = form.querySelector('[name=useDaySchedules]');
+          const dayBlock = form.querySelector('.day-schedules-block');
+          lunchChk?.addEventListener('change', () => form.querySelectorAll('input[name=lunchFrom],input[name=lunchTo],input[name*=lunchFrom],input[name*=lunchTo]').forEach(i => { i.disabled = !lunchChk.checked; }));
+          useDaysChk?.addEventListener('change', () => { if (dayBlock) dayBlock.style.display = useDaysChk.checked ? 'block' : 'none'; });
+          form._togglesSet = true;
+        }
+      }
+    };
+
+    document.getElementById('addCounterBtn').onclick = () => {
+      counters.push({ jobIds: [], taxDisplay: 'net', period: 'month', roundRubles: true, _new: true });
+      saveAndRender();
+      const w = document.querySelector(`.counter-widget[data-index="${counters.length - 1}"]`);
+      if (w) w.classList.add('configuring');
+    };
+
+    function updateDateTime() {
+      const el = document.getElementById('currentDatetime');
+      if (el) el.textContent = new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    updateDateTime();
+    setInterval(updateDateTime, 1000);
+
+    renderJobs();
+    renderCounters();
+    updateJobStatuses();
+    setInterval(updateJobStatuses, 1000);
+    setInterval(tickCounters, 1000);
+  </script>
+</body>
+</html>
