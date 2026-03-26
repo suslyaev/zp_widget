@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Зарплатный счётчик</title>
+  <title>zp-widget</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
@@ -370,7 +370,9 @@
     }
     .counter-widget .expand-btn { right: 2.1rem; }
     .counter-widget .timer-btn { right: 3.7rem; }
+    .counter-widget .share-btn { right: 5.3rem; }
     .counter-widget .expand-btn:hover, .counter-widget .timer-btn:hover { color: var(--accent); }
+    .counter-widget .share-btn:hover { color: var(--accent); }
     .counter-widget .live-badge {
       position: absolute;
       top: 0.55rem;
@@ -611,7 +613,7 @@
 </head>
 <body>
   <header class="page-header">
-    <h1>Зарплатный счётчик</h1>
+    <h1>zp-widget</h1>
     <div class="current-datetime" id="currentDatetime">—</div>
   </header>
 
@@ -1434,6 +1436,7 @@
           <button class="config-btn" data-config="${i}" title="Настроить">⚙</button>
           <button class="expand-btn" data-expand="${i}" title="Открыть крупно">⛶</button>
           <button class="timer-btn" data-timer="${i}" title="Секундомер">▶</button>
+          <button class="timer-btn share-btn" data-share="${i}" title="Поделиться">↗</button>
           <div class="value" data-value="${i}">0 ₽</div>
           <div class="label">${widgetTitle}</div>
           <div class="label-tax">${cfg.taxDisplay === 'gross' ? 'До вычетов' : 'После вычетов'}</div>
@@ -1623,7 +1626,7 @@
       if (!t) {
         body.innerHTML = `
           <div class="timer-live">
-            <input class="name" id="newTimerName" placeholder="Название замера (кофе, созвон...)">
+            <input class="name" id="newTimerName" placeholder="Что ты делал? (например: пил кофе)">
             <div class="row"><button class="modal-btn" id="newTimerStart">▶ Запустить секундомер</button></div>
           </div>
         `;
@@ -1637,7 +1640,7 @@
       const earned = getLiveTimerMoney(cfg, value);
       body.innerHTML = `
         <div class="timer-live">
-          <input class="name" id="timerTitleInput" value="${escapeAttr(t.title || '')}" placeholder="Название">
+          <input class="name" id="timerTitleInput" value="${escapeAttr(t.title || '')}" placeholder="Что ты делал?">
           <div class="time" id="timerLiveTime">${formatDuration(totalMs)}</div>
           <div class="money" id="timerLiveMoney">${formatMoney(earned, cfg.currency || 'RUB', false)}</div>
           <div class="row">
@@ -1679,6 +1682,7 @@
           <div class="actions">
             <button class="modal-btn edit-measure-btn">Имя</button>
             <button class="modal-btn continue-measure-btn">Продолжить</button>
+            <button class="modal-btn share-measure-btn">Поделиться</button>
             <button class="modal-btn danger del-measure-btn">Удалить</button>
           </div>
         </div>
@@ -1699,6 +1703,139 @@
       if (measurementSort === 'duration') items.sort((a, b) => Number(b.totalMs || 0) - Number(a.totalMs || 0));
       if (measurementSort === 'newest') items.sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt));
       return items;
+    }
+
+    async function buildShareImage({ title, amountText, subtitle, accentText, preAmountText }) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1200;
+      canvas.height = 630;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      ctx.fillStyle = '#0f0f12';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#1a1a20';
+      ctx.fillRect(60, 60, 1080, 510);
+      ctx.strokeStyle = '#2a2a32';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(60, 60, 1080, 510);
+
+      ctx.fillStyle = '#e8e8ec';
+      ctx.font = '600 34px Manrope, Arial, sans-serif';
+      ctx.fillText(title || 'zp-widget', 110, 150);
+
+      if (preAmountText) {
+        ctx.fillStyle = '#888';
+        ctx.font = '500 32px Manrope, Arial, sans-serif';
+        ctx.fillText(preAmountText, 110, 230);
+      }
+
+      ctx.fillStyle = '#00d4aa';
+      ctx.font = '700 84px "JetBrains Mono", monospace';
+      ctx.fillText(amountText || '0', 110, preAmountText ? 330 : 300);
+
+      const hasPreAmount = !!preAmountText;
+      const hasAccent = !!accentText;
+      const subtitleY = hasPreAmount ? (hasAccent ? 410 : 430) : (hasAccent ? 370 : 430);
+      const accentY = hasPreAmount ? 470 : 440;
+
+      ctx.fillStyle = '#888';
+      ctx.font = '500 30px Manrope, Arial, sans-serif';
+      if (subtitle) ctx.fillText(subtitle, 110, subtitleY);
+
+      ctx.fillStyle = '#e8e8ec';
+      ctx.font = '500 24px Manrope, Arial, sans-serif';
+      if (accentText) ctx.fillText(accentText, 110, accentY);
+
+      ctx.fillStyle = '#888';
+      ctx.font = '500 20px Manrope, Arial, sans-serif';
+      ctx.fillText('zp-widget', 110, 525);
+
+      return await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    }
+
+    async function shareBlobOrFallback(blob, title, text) {
+      const url = window.location.href;
+      const file = blob ? new File([blob], 'zp-widget.png', { type: 'image/png' }) : null;
+      const message = `${text}\n${url}`;
+      const copyText = async () => {
+        try {
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(message);
+            return true;
+          }
+        } catch (_) {}
+        return false;
+      };
+      const downloadImage = () => {
+        if (!file) return;
+        const objectUrl = URL.createObjectURL(file);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = 'zp-widget-share.png';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      };
+      const openImageTab = () => {
+        if (!blob) return;
+        const objectUrl = URL.createObjectURL(blob);
+        window.open(objectUrl, '_blank');
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 15000);
+      };
+
+      // 1) На современных мобильных и десктопах: пробуем поделиться с картинкой.
+      if (navigator.share) {
+        try {
+          if (file && navigator.canShare?.({ files: [file] })) {
+            await navigator.share({ title, text, url, files: [file] });
+            return;
+          }
+        } catch (_) {}
+        // 2) Если файлы не поддерживаются, делимся текстом/ссылкой.
+        try {
+          await navigator.share({ title, text, url });
+          return;
+        } catch (_) {}
+      }
+
+      // 3) Fallback для браузеров без Web Share API:
+      // копируем текст/ссылку + отдаём картинку на скачивание/просмотр.
+      const copied = await copyText();
+      if (file) {
+        downloadImage();
+        openImageTab();
+      }
+      alert((copied ? 'Текст и ссылка скопированы. ' : '') + 'Откройте картинку и отправьте её вместе со ссылкой: ' + url);
+    }
+
+    async function shareCounter(idx) {
+      const cfg = counters[idx];
+      if (!cfg) return;
+      const { value } = await getCounterValue(cfg);
+      const periodLabel = PERIODS.find(p => p.id === cfg.period)?.label || cfg.period;
+      const jobsLabel = (cfg.jobIds || []).length === 0 ? '—' : cfg.jobIds.map(id => employerLabel(jobs[id], id)).join(', ');
+      const title = (cfg.name && String(cfg.name).trim()) ? cfg.name : `${jobsLabel} · ${periodLabel}`;
+      const amountText = formatMoney(value, cfg.currency || 'RUB', cfg.roundRubles !== false);
+      const blob = await buildShareImage({
+        title,
+        preAmountText: `заработано`,
+        amountText,
+        subtitle: `${periodLabel} · ${cfg.taxDisplay === 'gross' ? 'до вычета' : 'после вычета'}`,
+        accentText: jobsLabel,
+      });
+      await shareBlobOrFallback(blob, 'Поделиться виджетом', `Сейчас по счётчику: ${amountText}`);
+    }
+
+    async function shareMeasurement(cfg, m) {
+      const amountText = formatMoney(Number(m.earned || 0), m.currency || cfg.currency || 'RUB', false);
+      const action = (m.title || '').trim() || 'занимался делом';
+      const blob = await buildShareImage({
+        title: `Пока я ${action},`,
+        preAmountText: `я заработал`,
+        amountText,
+        subtitle: `Длительность: ${formatDuration(m.totalMs || 0)}`,
+        accentText: '',
+      });
+      await shareBlobOrFallback(blob, 'Поделиться замером', `Пока я ${action}, я заработал ${amountText}`);
     }
 
     async function renderZoomModal() {
@@ -1727,8 +1864,9 @@
         <div class="zoom-meta">${escapeAttr(jobsLabel)}</div>
         <div class="zoom-sub">${periodLabel} · ${cfg.taxDisplay === 'gross' ? 'До вычета' : 'После вычета'}</div>
         ${fxInfo ? `<div class="zoom-fx">${escapeAttr(fxInfo)}</div>` : ''}
-        <div class="row" style="display:flex;justify-content:center;margin-bottom:0.8rem;">
+        <div class="row" style="display:flex;justify-content:center;gap:0.5rem;margin-bottom:0.8rem;">
           <button class="modal-btn" id="zoomStartTimer">▶ Добавить секундомер</button>
+          <button class="modal-btn" id="zoomShareWidget">↗ Поделиться виджетом</button>
         </div>
         <div class="measure-tools">
           <select id="measureSort">
@@ -1747,6 +1885,7 @@
         <div class="measure-list">${history}</div>
       `;
       document.getElementById('zoomStartTimer')?.addEventListener('click', () => openTimerModal(idx));
+      document.getElementById('zoomShareWidget')?.addEventListener('click', () => shareCounter(idx));
       document.getElementById('measureSort')?.addEventListener('change', (e) => {
         measurementSort = e.target.value || 'newest';
         renderZoomModal();
@@ -1784,6 +1923,11 @@
           cfg.measurements = (cfg.measurements || []).filter(x => x.id !== mid);
           saveAndRender();
           renderZoomModal();
+        });
+        item.querySelector('.share-measure-btn')?.addEventListener('click', async () => {
+          const rec = (cfg.measurements || []).find(x => x.id === mid);
+          if (!rec) return;
+          await shareMeasurement(cfg, rec);
         });
       });
     }
@@ -1953,6 +2097,7 @@
       const cfgIdx = e.target.dataset?.config;
       const timerIdx = e.target.dataset?.timer;
       const expandIdx = e.target.dataset?.expand;
+      const shareIdx = e.target.dataset?.share;
       const saveIdx = e.target.dataset?.save;
       const delIdx = e.target.dataset?.del;
       if (cfgIdx !== undefined) {
@@ -1961,6 +2106,7 @@
       }
       if (timerIdx !== undefined) openTimerModal(+timerIdx);
       if (expandIdx !== undefined) openZoomModal(+expandIdx);
+      if (shareIdx !== undefined) shareCounter(+shareIdx);
       if (saveIdx !== undefined) {
         const w = document.querySelector(`.counter-widget[data-index="${saveIdx}"]`);
         if (!w) return;
