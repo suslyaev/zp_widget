@@ -4,10 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>zp-widget</title>
+  <meta name="description" content="zp-widget — виджеты заработка в реальном времени: работы, налоги, валюты, отпуска, таймеры и шаринг результатов.">
+  <meta name="keywords" content="zp-widget, зарплата, виджет, таймер, заработок, расчёт">
   <meta name="application-name" content="ZP-Widget">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="ZP-Widget">
   <meta name="theme-color" content="#0f0f12">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="ZP-Widget">
+  <meta property="og:title" content="ZP-Widget">
+  <meta property="og:description" content="Виджеты заработка в реальном времени: несколько работ, налоги, валюты, отпуска, замеры времени и шаринг.">
+  <meta property="og:url" content="https://zp-widget.ru/">
+  <meta property="og:image" content="https://zp-widget.ru/static/icon.svg">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="ZP-Widget">
+  <meta name="twitter:description" content="Виджеты заработка в реальном времени.">
+  <meta name="twitter:image" content="https://zp-widget.ru/static/icon.svg">
   <link rel="manifest" href="/static/site.webmanifest">
   <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
   <link rel="apple-touch-icon" href="/static/icon.svg">
@@ -1970,9 +1982,9 @@
         preAmountText: `заработано`,
         amountText,
         subtitle: `${periodLabel} · ${cfg.taxDisplay === 'gross' ? 'до вычета' : 'после вычета'}`,
-        accentText: jobsLabel && jobsLabel !== '—' ? `Работодатель: ${jobsLabel}` : '',
+        accentText: jobsLabel && jobsLabel !== '—' ? jobsLabel : '',
       });
-      await shareBlobOrFallback(blob, 'Поделиться виджетом', `Сейчас по счётчику: ${amountText}`);
+      await shareBlobOrFallback(blob, title, `${title}\nСейчас по счётчику: ${amountText}`);
     }
 
     async function shareMeasurement(cfg, m) {
