@@ -967,7 +967,7 @@
       if (!used.length) return '';
       return `
         <div class="fx-manual">
-          ${used.map(c => `<label class="cfg-field">1 ${c} = <input type="number" inputmode="decimal" step="0.0001" min="0" data-fx-manual="${c}" value="${Number(fxManualToRub[c] || fxRatesToRub[c] || '').toString()}"> RUB</label>`).join('')}
+          ${used.map(c => `<label class="cfg-field">1 ${c} = <input type="tel" inputmode="numeric" pattern="[0-9]*" data-fx-manual="${c}" value="${Number(fxManualToRub[c] || fxRatesToRub[c] || '').toString()}"> RUB</label>`).join('')}
           <div class="fx-note">Если интернет/API недоступны, введите курсы вручную. Пусто = использовать загруженный курс.</div>
         </div>
       `;
@@ -1059,8 +1059,8 @@
             <div class="payout-grid">
               <div class="field"><label>Тип выплаты</label><select name="payout_kind">${PAYOUT_KINDS.map(k => `<option value="${k.id}" ${p.kind === k.id ? 'selected' : ''}>${k.label}</option>`).join('')}</select></div>
               <div class="field"><label>Название</label><input type="text" name="payout_title" value="${escapeAttr(p.title)}" placeholder="Например, KPI март"></div>
-              <div class="field"><label>Сумма</label><input type="number" inputmode="decimal" name="payout_amount" min="0" step="0.01" value="${p.amount || ''}" placeholder="0"></div>
-              <div class="field"><label>Налог, %</label><input type="number" inputmode="decimal" name="payout_tax_rate" min="0" max="100" step="0.01" value="${Number(p.taxRate || 0)}" placeholder="0"></div>
+              <div class="field"><label>Сумма</label><input type="tel" inputmode="numeric" pattern="[0-9]*" name="payout_amount" value="${p.amount || ''}" placeholder="0"></div>
+              <div class="field"><label>Налог, %</label><input type="tel" inputmode="numeric" pattern="[0-9]*" name="payout_tax_rate" value="${Number(p.taxRate || 0)}" placeholder="0"></div>
               <div class="field full"><label>Период выплаты</label><div class="field-row"><input type="date" name="payout_from" value="${p.fromDate}"><span>–</span><input type="date" name="payout_to" value="${p.toDate}"></div></div>
               <div class="field full"><label>График выплаты</label><select name="payout_schedule"><option value="" ${!p.schedule ? 'selected' : ''}>Наследовать от работы</option>${SCHEDULES.map(s => `<option value="${s.id}" ${p.schedule === s.id ? 'selected' : ''}>${s.label}</option>`).join('')}</select></div>
               <div class="field full row-actions"><label class="hide-chk"><input type="checkbox" name="payout_hidden" ${p.hidden ? 'checked' : ''}> Скрыть выплату</label></div>
@@ -1180,10 +1180,10 @@
             <div class="field full collapsible-toggle">
               <button type="button" class="payout-btn toggle-salary-btn">Зарплата</button>
               <div class="collapsible-block salary-block">
-                <div class="field"><label>Ставка</label><input type="number" inputmode="decimal" class="rate-input" name="rate" value="${job.rate || ''}" min="0" step="0.01" placeholder="0"></div>
+                <div class="field"><label>Ставка</label><input type="tel" inputmode="numeric" pattern="[0-9]*" class="rate-input" name="rate" value="${job.rate || ''}" placeholder="0"></div>
                 <div class="field"><label>Валюта</label><select name="currency">${CURRENCIES.map(c => `<option value="${c.id}" ${(job.currency || 'RUB') === c.id ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
                 <div class="field"><label>Периодичность</label><select name="rateUnit">${RATE_UNITS.map(u => `<option value="${u.id}" ${job.rateUnit === u.id ? 'selected' : ''}>${u.label}</option>`).join('')}</select></div>
-                <div class="field"><label>Налог, %</label><input type="number" inputmode="decimal" name="taxRate" min="0" max="100" step="0.01" value="${Number(job.taxRate || 0)}" placeholder="0"></div>
+                <div class="field"><label>Налог, %</label><input type="tel" inputmode="numeric" pattern="[0-9]*" name="taxRate" value="${Number(job.taxRate || 0)}" placeholder="0"></div>
               </div>
             </div>
             <div class="field full collapsible-toggle">
@@ -1914,18 +1914,21 @@
         setTimeout(() => URL.revokeObjectURL(objectUrl), 15000);
       };
 
-      // 1) На современных мобильных и десктопах: сначала текстовый share (самая широкая поддержка),
-      // затем share с картинкой.
+      // 1) Приоритет: картинка + текст (чтобы в шаринг попадала карточка),
+      // затем fallback на текст/ссылку.
       if (navigator.share) {
+        try {
+          if (file && navigator.canShare?.({ files: [file] })) {
+            // Не передаем отдельное поле url в file-share: многие клиенты тогда
+            // подхватывают только ссылку и игнорируют текст/изображение.
+            const textWithOptionalUrl = shareUrl ? `${text}\n${shareUrl}` : text;
+            await navigator.share({ title, text: textWithOptionalUrl, files: [file] });
+            return;
+          }
+        } catch (_) {}
         try {
           await navigator.share({ title, text, ...(shareUrl ? { url: shareUrl } : {}) });
           return;
-        } catch (_) {}
-        try {
-          if (file && navigator.canShare?.({ files: [file] })) {
-            await navigator.share({ title, text, ...(shareUrl ? { url: shareUrl } : {}), files: [file] });
-            return;
-          }
         } catch (_) {}
       }
 
