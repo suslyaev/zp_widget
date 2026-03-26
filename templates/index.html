@@ -321,6 +321,7 @@
     .counter-widget .value.paused { color: var(--text-muted); }
     .counter-widget .label { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem; text-align: center; }
     .counter-widget .label-tax { font-size: 0.65rem; color: var(--text-muted); opacity: 0.8; margin-top: 0.2rem; text-align: center; }
+    .counter-widget .label-fx { font-size: 0.62rem; color: var(--text-muted); opacity: 0.75; margin-top: 0.15rem; text-align: center; }
     .counter-widget .config-btn {
       position: absolute;
       top: 0.5rem;
@@ -543,6 +544,7 @@
     }
     .zoom-sub { text-align: center; color: var(--text-muted); margin-bottom: 0.9rem; font-size: 0.8rem; }
     .zoom-meta { text-align: center; color: var(--text-muted); opacity: 0.95; margin-bottom: 0.45rem; font-size: 0.95rem; font-weight: 600; }
+    .zoom-fx { text-align: center; color: var(--text-muted); opacity: 0.8; margin-top: -0.55rem; margin-bottom: 0.8rem; font-size: 0.72rem; }
     .measure-tools {
       display: flex;
       gap: 0.5rem;
@@ -704,6 +706,17 @@
       const to = String(toCurrency || 'RUB').toUpperCase();
       if (from === to) return amount;
       return amount * (toRubRate(from) / toRubRate(to));
+    }
+
+    function getFxInfoText(cfg) {
+      const target = String(cfg?.currency || 'RUB').toUpperCase();
+      const jobCurrencies = (cfg?.jobIds || [])
+        .map(id => String(jobs[id]?.currency || 'RUB').toUpperCase())
+        .filter(Boolean);
+      const distinct = Array.from(new Set(jobCurrencies)).filter(c => c !== target);
+      if (!distinct.length) return '';
+      const parts = distinct.map(c => `1 ${c} = ${convertCurrency(1, c, target).toFixed(4)} ${target}`);
+      return `Курс: ${parts.join(' · ')}`;
     }
 
     async function loadFxRates() {
@@ -1060,6 +1073,7 @@
         const widgetTitle = (cfg.name && String(cfg.name).trim())
           ? escapeAttr(cfg.name)
           : `${jobsLabel} · ${periodLabel}`;
+        const fxInfo = getFxInfoText(cfg);
         const badge = cfg.activeTimer ? `<span class="live-badge ${cfg.activeTimer.paused ? 'paused' : 'active'}">${cfg.activeTimer.paused ? 'Пауза' : 'Таймер'}</span>` : '';
         div.innerHTML = `
           ${badge}
@@ -1069,6 +1083,7 @@
           <div class="value" data-value="${i}">0 ₽</div>
           <div class="label">${widgetTitle}</div>
           <div class="label-tax">${cfg.taxDisplay === 'gross' ? 'До вычетов' : 'После вычетов'}</div>
+          ${fxInfo ? `<div class="label-fx">${escapeAttr(fxInfo)}</div>` : ''}
           <div class="config-form">
             <div class="cfg-section">
               <div class="cfg-label">Работы</div>
@@ -1340,6 +1355,7 @@
       const { value } = await getCounterValue(cfg);
       const periodLabel = PERIODS.find(p => p.id === cfg.period)?.label || cfg.period;
       const jobsLabel = (cfg.jobIds || []).length === 0 ? '—' : cfg.jobIds.map(id => jobs[id]?.name || `Работа ${id + 1}`).join(', ');
+      const fxInfo = getFxInfoText(cfg);
       const displayed = getDisplayedMeasurements(cfg);
       const history = displayed.map(measurementItemHtml).join('') || '<div class="measure-item">Пока нет замеров</div>';
       const active = cfg.activeTimer ? `
@@ -1355,6 +1371,7 @@
         <div class="zoom-value">${formatMoney(value, cfg.currency || 'RUB', cfg.roundRubles !== false)}</div>
         <div class="zoom-meta">${escapeAttr(jobsLabel)}</div>
         <div class="zoom-sub">${periodLabel} · ${cfg.taxDisplay === 'gross' ? 'До вычета' : 'После вычета'}</div>
+        ${fxInfo ? `<div class="zoom-fx">${escapeAttr(fxInfo)}</div>` : ''}
         <div class="row" style="display:flex;justify-content:center;margin-bottom:0.8rem;">
           <button class="modal-btn" id="zoomStartTimer">▶ Добавить секундомер</button>
         </div>
