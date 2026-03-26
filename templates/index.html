@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>zp-widget</title>
+  <meta name="application-name" content="ZP-Widget">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="ZP-Widget">
+  <meta name="theme-color" content="#0f0f12">
+  <link rel="manifest" href="/static/site.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+  <link rel="apple-touch-icon" href="/static/icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
@@ -150,6 +157,12 @@
     @media (max-width: 480px) {
       .edit-form .form-grid { grid-template-columns: 1fr; }
     }
+    @media (max-width: 768px) {
+      .edit-form input, .edit-form select, .counter-widget .config-form input, .counter-widget .config-form select {
+        font-size: 16px;
+      }
+      .edit-form .payout-grid { grid-template-columns: 1fr; }
+    }
     .edit-form .form-grid .full { grid-column: 1 / -1; }
     .edit-form .field {
       display: grid;
@@ -280,6 +293,11 @@
       font-size: 0.8rem;
       color: var(--text-muted);
     }
+    .edit-form .payout-grid .buttons-row {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+    }
     .edit-form .payout-btn {
       background: transparent;
       border: 1px solid var(--border);
@@ -334,6 +352,21 @@
       gap: 1.25rem;
       align-items: start;
     }
+    .add-widget-card {
+      aspect-ratio: 1.5;
+      border: 1px dashed var(--accent);
+      border-radius: 12px;
+      background: rgba(0, 212, 170, 0.05);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      font-weight: 300;
+      cursor: pointer;
+      user-select: none;
+    }
+    .add-widget-card:hover { background: rgba(0, 212, 170, 0.12); }
     .counter-widget {
       aspect-ratio: 1.5;
       background: var(--card);
@@ -343,7 +376,10 @@
       display: flex;
       flex-direction: column;
       position: relative;
+      cursor: grab;
     }
+    .counter-widget.dragging { opacity: 0.55; cursor: grabbing; }
+    .counter-widget.drop-target { outline: 2px dashed var(--accent); outline-offset: 2px; }
     .counter-widget.configuring {
       aspect-ratio: auto;
       min-height: 280px;
@@ -658,18 +694,17 @@
     <div class="current-datetime" id="currentDatetime">—</div>
   </header>
 
+  <section class="counters-section">
+    <div class="counters-header">
+      <h2>Виджеты</h2>
+    </div>
+    <div class="counters-grid" id="countersGrid"></div>
+  </section>
+
   <section class="jobs-section">
     <h2>Работы</h2>
     <div class="jobs-list" id="jobsList"></div>
     <button class="add-btn" id="addJobBtn" style="margin-top: 0.75rem;">+ Добавить работу</button>
-  </section>
-
-  <section class="counters-section">
-    <div class="counters-header">
-      <h2>Виджеты</h2>
-      <button class="add-btn" id="addCounterBtn">+ Добавить виджет</button>
-    </div>
-    <div class="counters-grid" id="countersGrid"></div>
   </section>
 
   <div class="modal-overlay" id="timerModal">
@@ -822,6 +857,7 @@
     let measurementSort = 'newest';
     let measurementFilter = 'all';
     let holidaysCache = JSON.parse(localStorage.getItem('zp_holidays_cache') || '{}');
+    let draggedCounterIdx = null;
 
     function formatMoney(n, currency = 'RUB', roundToUnit = false) {
       const amount = roundToUnit ? Math.floor(n) : n;
@@ -1025,14 +1061,12 @@
               <div class="field"><label>Название</label><input type="text" name="payout_title" value="${escapeAttr(p.title)}" placeholder="Например, KPI март"></div>
               <div class="field"><label>Сумма</label><input type="number" name="payout_amount" min="0" step="0.01" value="${p.amount || ''}" placeholder="0"></div>
               <div class="field"><label>Налог, %</label><input type="number" name="payout_tax_rate" min="0" max="100" step="0.01" value="${Number(p.taxRate || 0)}" placeholder="0"></div>
-              <div class="field"><label>График выплаты</label><select name="payout_schedule"><option value="" ${!p.schedule ? 'selected' : ''}>Наследовать от работы</option>${SCHEDULES.map(s => `<option value="${s.id}" ${p.schedule === s.id ? 'selected' : ''}>${s.label}</option>`).join('')}</select></div>
-              <div class="field"><label>Период выплаты</label><div class="field-row"><input type="date" name="payout_from" value="${p.fromDate}"><span>–</span><input type="date" name="payout_to" value="${p.toDate}"></div></div>
-              <div class="field full row-actions">
-                <label class="hide-chk"><input type="checkbox" name="payout_hidden" ${p.hidden ? 'checked' : ''}> Скрыть выплату</label>
-                <div>
-                  <button type="button" class="payout-btn save-payout-btn">Сохранить выплату</button>
-                  <button type="button" class="payout-btn danger del-payout-btn">Удалить</button>
-                </div>
+              <div class="field full"><label>Период выплаты</label><div class="field-row"><input type="date" name="payout_from" value="${p.fromDate}"><span>–</span><input type="date" name="payout_to" value="${p.toDate}"></div></div>
+              <div class="field full"><label>График выплаты</label><select name="payout_schedule"><option value="" ${!p.schedule ? 'selected' : ''}>Наследовать от работы</option>${SCHEDULES.map(s => `<option value="${s.id}" ${p.schedule === s.id ? 'selected' : ''}>${s.label}</option>`).join('')}</select></div>
+              <div class="field full row-actions"><label class="hide-chk"><input type="checkbox" name="payout_hidden" ${p.hidden ? 'checked' : ''}> Скрыть выплату</label></div>
+              <div class="field full buttons-row">
+                <button type="button" class="payout-btn save-payout-btn">Сохранить выплату</button>
+                <button type="button" class="payout-btn danger del-payout-btn">Удалить</button>
               </div>
             </div>
           </div>
@@ -1146,9 +1180,10 @@
             <div class="field full collapsible-toggle">
               <button type="button" class="payout-btn toggle-salary-btn">Зарплата</button>
               <div class="collapsible-block salary-block">
-                <div class="field"><label>Ставка</label><div class="field-row"><input type="number" class="rate-input" name="rate" value="${job.rate || ''}" min="0" step="0.01" placeholder="0"><select name="rateUnit">${RATE_UNITS.map(u => `<option value="${u.id}" ${job.rateUnit === u.id ? 'selected' : ''}>${u.label}</option>`).join('')}</select></div></div>
-                <div class="field"><label>Налог, %</label><input type="number" name="taxRate" min="0" max="100" step="0.01" value="${Number(job.taxRate || 0)}" placeholder="0"></div>
+                <div class="field"><label>Ставка</label><input type="number" class="rate-input" name="rate" value="${job.rate || ''}" min="0" step="0.01" placeholder="0"></div>
                 <div class="field"><label>Валюта</label><select name="currency">${CURRENCIES.map(c => `<option value="${c.id}" ${(job.currency || 'RUB') === c.id ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
+                <div class="field"><label>Периодичность</label><select name="rateUnit">${RATE_UNITS.map(u => `<option value="${u.id}" ${job.rateUnit === u.id ? 'selected' : ''}>${u.label}</option>`).join('')}</select></div>
+                <div class="field"><label>Налог, %</label><input type="number" name="taxRate" min="0" max="100" step="0.01" value="${Number(job.taxRate || 0)}" placeholder="0"></div>
               </div>
             </div>
             <div class="field full collapsible-toggle">
@@ -1498,6 +1533,7 @@
         const div = document.createElement('div');
         div.className = 'counter-widget' + (cfg._new ? ' new-counter configuring' : '');
         div.dataset.index = i;
+        div.draggable = !cfg._new;
         const periodLabel = PERIODS.find(p => p.id === cfg.period)?.label || cfg.period;
         const jobsLabel = cfg.jobIds.length === 0 ? '—' : cfg.jobIds.map(id => employerLabel(jobs[id], id)).join(', ');
         const widgetTitle = (cfg.name && String(cfg.name).trim())
@@ -1517,6 +1553,10 @@
           ${fxInfo ? `<div class="label-fx">${escapeAttr(fxInfo)}</div>` : ''}
           <div class="config-form">
             <div class="cfg-section">
+              <div class="cfg-label">Название виджета</div>
+              <input type="text" data-counter-name="${i}" value="${escapeAttr(cfg.name || '')}" placeholder="${jobsLabel} · ${periodLabel}" />
+            </div>
+            <div class="cfg-section">
               <div class="cfg-label">Работы</div>
               <div class="jobs-list" data-jobs="${i}">${jobs.length ? jobs.map((j, idx) => `<label class="job-chk"><input type="checkbox" value="${idx}" ${(cfg.jobIds || []).includes(idx) ? 'checked' : ''}> ${escapeAttr(employerLabel(j, idx))}</label>`).join('') : '<span class="jobs-empty">Добавьте работы выше</span>'}</div>
             </div>
@@ -1530,10 +1570,6 @@
               ${buildManualFxInputs(cfg)}
             </div>
             <div class="cfg-section">
-              <div class="cfg-label">Название виджета</div>
-              <input type="text" data-counter-name="${i}" value="${escapeAttr(cfg.name || '')}" placeholder="${jobsLabel} · ${periodLabel}" />
-            </div>
-            <div class="cfg-section">
               <label class="round-chk"><input type="checkbox" data-round="${i}" ${cfg.roundRubles !== false ? 'checked' : ''}> Округлять до рублей</label>
             </div>
             <div class="btn-row"><button class="save-cfg" data-save="${i}">Готово</button><button class="del-cfg" data-del="${i}">Удалить</button></div>
@@ -1541,6 +1577,15 @@
         `;
         el.appendChild(div);
       });
+      if (jobs.length > 0) {
+        const add = document.createElement('button');
+        add.type = 'button';
+        add.className = 'add-widget-card';
+        add.setAttribute('data-add-widget', '1');
+        add.title = 'Добавить виджет';
+        add.textContent = '+';
+        el.appendChild(add);
+      }
     }
 
     function getCounterValue(cfg) {
@@ -1869,18 +1914,18 @@
         setTimeout(() => URL.revokeObjectURL(objectUrl), 15000);
       };
 
-      // 1) На современных мобильных и десктопах: пробуем поделиться с картинкой.
+      // 1) На современных мобильных и десктопах: сначала текстовый share (самая широкая поддержка),
+      // затем share с картинкой.
       if (navigator.share) {
+        try {
+          await navigator.share({ title, text, ...(shareUrl ? { url: shareUrl } : {}) });
+          return;
+        } catch (_) {}
         try {
           if (file && navigator.canShare?.({ files: [file] })) {
             await navigator.share({ title, text, ...(shareUrl ? { url: shareUrl } : {}), files: [file] });
             return;
           }
-        } catch (_) {}
-        // 2) Если файлы не поддерживаются, делимся текстом/ссылкой.
-        try {
-          await navigator.share({ title, text, ...(shareUrl ? { url: shareUrl } : {}) });
-          return;
         } catch (_) {}
       }
 
@@ -2185,6 +2230,13 @@
     });
 
     document.getElementById('countersGrid').addEventListener('click', (e) => {
+      if (e.target.closest('[data-add-widget]')) {
+        counters.push({ jobIds: [], taxDisplay: 'net', period: 'month', currency: 'RUB', roundRubles: true, measurements: [], activeTimer: null, name: '', _new: true });
+        saveAndRender();
+        const w = document.querySelector(`.counter-widget[data-index="${counters.length - 1}"]`);
+        if (w) w.classList.add('configuring');
+        return;
+      }
       const cfgIdx = e.target.dataset?.config;
       const timerIdx = e.target.dataset?.timer;
       const expandIdx = e.target.dataset?.expand;
@@ -2241,6 +2293,57 @@
       }
     });
 
+    document.getElementById('countersGrid').addEventListener('dragstart', (e) => {
+      const w = e.target.closest('.counter-widget');
+      if (!w) return;
+      if (w.classList.contains('configuring')) {
+        e.preventDefault();
+        return;
+      }
+      draggedCounterIdx = +w.dataset.index;
+      w.classList.add('dragging');
+      if (e.dataTransfer) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(draggedCounterIdx));
+      }
+    });
+
+    document.getElementById('countersGrid').addEventListener('dragover', (e) => {
+      const target = e.target.closest('.counter-widget');
+      if (!target || draggedCounterIdx === null) return;
+      e.preventDefault();
+      document.querySelectorAll('.counter-widget.drop-target').forEach(el => el.classList.remove('drop-target'));
+      target.classList.add('drop-target');
+    });
+
+    document.getElementById('countersGrid').addEventListener('dragleave', (e) => {
+      const target = e.target.closest('.counter-widget');
+      if (!target) return;
+      target.classList.remove('drop-target');
+    });
+
+    document.getElementById('countersGrid').addEventListener('drop', (e) => {
+      const target = e.target.closest('.counter-widget');
+      if (!target || draggedCounterIdx === null) return;
+      e.preventDefault();
+      const toIdx = +target.dataset.index;
+      const fromIdx = draggedCounterIdx;
+      document.querySelectorAll('.counter-widget.drop-target').forEach(el => el.classList.remove('drop-target'));
+      if (Number.isNaN(fromIdx) || Number.isNaN(toIdx) || fromIdx === toIdx) return;
+      const moved = counters.splice(fromIdx, 1)[0];
+      counters.splice(toIdx, 0, moved);
+      // При изменении порядка закрываем открытые модалки во избежание несоответствия индексов.
+      closeTimerModal();
+      closeZoomModal();
+      saveAndRender();
+    });
+
+    document.getElementById('countersGrid').addEventListener('dragend', () => {
+      document.querySelectorAll('.counter-widget.dragging').forEach(el => el.classList.remove('dragging'));
+      document.querySelectorAll('.counter-widget.drop-target').forEach(el => el.classList.remove('drop-target'));
+      draggedCounterIdx = null;
+    });
+
     function saveAndRender() {
       localStorage.setItem('zp_jobs', JSON.stringify(jobs));
       localStorage.setItem('zp_counters', JSON.stringify(counters.map(c => ({ ...c, _new: undefined }))));
@@ -2251,8 +2354,6 @@
     }
 
     function updateAddCounterVisibility() {
-      const addCounterBtn = document.getElementById('addCounterBtn');
-      if (addCounterBtn) addCounterBtn.style.display = jobs.length ? 'inline-block' : 'none';
       const countersSection = document.querySelector('.counters-section');
       if (countersSection) countersSection.style.display = jobs.length ? 'block' : 'none';
     }
@@ -2269,13 +2370,6 @@
         const form = card.querySelector('.edit-form');
         bindJobFormUi(form);
       }
-    };
-
-    document.getElementById('addCounterBtn').onclick = () => {
-      counters.push({ jobIds: [], taxDisplay: 'net', period: 'month', currency: 'RUB', roundRubles: true, measurements: [], activeTimer: null, name: '', _new: true });
-      saveAndRender();
-      const w = document.querySelector(`.counter-widget[data-index="${counters.length - 1}"]`);
-      if (w) w.classList.add('configuring');
     };
 
     document.getElementById('timerModalClose').onclick = closeTimerModal;
@@ -2298,6 +2392,11 @@
     updateAddCounterVisibility();
     updateJobStatuses();
     loadFxRates().then(() => tickCounters());
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+      });
+    }
     setInterval(updateJobStatuses, 1000);
     setInterval(tickCounters, 1000);
   </script>
