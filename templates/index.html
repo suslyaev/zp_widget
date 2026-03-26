@@ -3,25 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>zp-widget</title>
-  <meta name="description" content="zp-widget — виджеты заработка в реальном времени: работы, налоги, валюты, отпуска, таймеры и шаринг результатов.">
-  <meta name="keywords" content="zp-widget, зарплата, виджет, таймер, заработок, расчёт">
+  <title>ZP-Widget — калькулятор заработка в реальном времени</title>
+  <meta name="description" content="ZP-Widget — калькулятор и виджеты заработка в реальном времени: работы, налоги, валюты, отпуска, таймеры и удобный шаринг результатов.">
+  <meta name="keywords" content="ZP-Widget, zp-widget, зарплата, виджет, таймер, заработок, расчёт">
   <meta name="application-name" content="ZP-Widget">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="ZP-Widget">
   <meta name="theme-color" content="#0f0f12">
   <meta property="og:type" content="website">
+  <meta property="og:locale" content="ru_RU">
   <meta property="og:site_name" content="ZP-Widget">
-  <meta property="og:title" content="ZP-Widget">
+  <meta property="og:title" content="ZP-Widget — калькулятор заработка в реальном времени">
   <meta property="og:description" content="Виджеты заработка в реальном времени: несколько работ, налоги, валюты, отпуска, замеры времени и шаринг.">
   <meta property="og:url" content="https://zp-widget.ru/">
   <meta property="og:image" content="https://zp-widget.ru/static/icon.svg">
+  <meta property="og:image:type" content="image/svg+xml">
+  <meta property="og:image:alt" content="Логотип ZP-Widget">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="ZP-Widget">
-  <meta name="twitter:description" content="Виджеты заработка в реальном времени.">
+  <meta name="twitter:title" content="ZP-Widget — калькулятор заработка в реальном времени">
+  <meta name="twitter:description" content="Виджеты заработка в реальном времени: работы, валюты, налоги, отпуска и таймеры.">
   <meta name="twitter:image" content="https://zp-widget.ru/static/icon.svg">
+  <meta name="twitter:image:alt" content="Логотип ZP-Widget">
+  <link rel="canonical" href="https://zp-widget.ru/">
   <link rel="manifest" href="/static/site.webmanifest">
   <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
+  <link rel="shortcut icon" href="/static/icon.svg">
   <link rel="apple-touch-icon" href="/static/icon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -87,6 +93,24 @@
     .add-btn:hover { background: var(--accent-dim); transform: translateY(-1px); }
     .jobs-section { margin-bottom: 2rem; }
     .jobs-list { display: flex; flex-direction: column; gap: 0.75rem; }
+    .add-job-card {
+      width: 100%;
+      min-height: 74px;
+      border: 1px dashed var(--accent);
+      border-radius: 12px;
+      background: rgba(0, 212, 170, 0.05);
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .add-job-card:hover { background: rgba(0, 212, 170, 0.12); transform: translateY(-1px); }
     .job-card {
       position: relative;
       background: var(--card);
@@ -700,7 +724,7 @@
 <body>
   <header class="page-header">
     <div class="title-row">
-      <h1>zp-widget</h1>
+      <h1>ZP-Widget</h1>
       <button class="help-btn" id="helpBtn" title="О проекте">?</button>
     </div>
     <div class="current-datetime" id="currentDatetime">—</div>
@@ -716,7 +740,7 @@
   <section class="jobs-section">
     <h2>Работы</h2>
     <div class="jobs-list" id="jobsList"></div>
-    <button class="add-btn" id="addJobBtn" style="margin-top: 0.75rem;">+ Добавить работу</button>
+    <button type="button" class="add-job-card" id="addJobBtn" style="margin-top: 0.75rem;">+ Добавить работу</button>
   </section>
 
   <div class="modal-overlay" id="timerModal">
@@ -742,11 +766,11 @@
   <div class="modal-overlay" id="helpModal">
     <div class="modal-card">
       <div class="modal-head">
-        <h3>Что умеет zp-widget</h3>
+        <h3>Что умеет ZP-Widget</h3>
         <button class="modal-close" id="helpModalClose">Закрыть</button>
       </div>
       <div class="help-content">
-        <p><strong>zp-widget</strong> показывает, как «капает» ваш заработок в реальном времени по выбранным периодам: день, неделя, месяц, год.</p>
+        <p><strong>ZP-Widget</strong> показывает, как «капает» ваш заработок в реальном времени по выбранным периодам: день, неделя, месяц, год.</p>
 
         <h4>Для чего это полезно</h4>
         <ul>
@@ -1589,7 +1613,7 @@
         `;
         el.appendChild(div);
       });
-      if (jobs.length > 0) {
+      if (jobs.some(j => !j?._new)) {
         const add = document.createElement('button');
         add.type = 'button';
         add.className = 'add-widget-card';
@@ -1862,7 +1886,7 @@
 
       ctx.fillStyle = '#e8e8ec';
       ctx.font = '600 34px Manrope, Arial, sans-serif';
-      ctx.fillText(title || 'zp-widget', 110, 150);
+      ctx.fillText(title || 'ZP-Widget', 110, 150);
 
       if (preAmountText) {
         ctx.fillStyle = '#888';
@@ -1890,7 +1914,7 @@
 
       ctx.fillStyle = '#888';
       ctx.font = '500 20px Manrope, Arial, sans-serif';
-      ctx.fillText('zp-widget', 110, brandY);
+      ctx.fillText('ZP-Widget', 110, brandY);
 
       return await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     }
@@ -2381,7 +2405,7 @@
 
     function updateAddCounterVisibility() {
       const countersSection = document.querySelector('.counters-section');
-      if (countersSection) countersSection.style.display = jobs.length ? 'block' : 'none';
+      if (countersSection) countersSection.style.display = jobs.some(j => !j?._new) ? 'block' : 'none';
     }
 
     document.getElementById('addJobBtn').onclick = () => {
