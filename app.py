@@ -39,9 +39,33 @@ DEFAULTS = {
     "rate": 0,
     "rateUnit": "month",
     "taxType": "none",
+    "taxRate": 0.0,
+    "currency": "RUB",
 }
 
 TAX_MULT = {"none": 1.0, "13": 0.87, "4": 0.96, "6": 0.94, "15": 0.85}
+
+
+def parse_tax_rate(entity: dict) -> float:
+    """Поддержка нового taxRate и обратная совместимость со старым taxType."""
+    if "taxRate" in entity and entity.get("taxRate") not in (None, ""):
+        try:
+            return max(0.0, min(100.0, float(entity.get("taxRate") or 0.0)))
+        except Exception:
+            pass
+    tax_type = str(entity.get("taxType", "none"))
+    if tax_type == "none":
+        return 0.0
+    try:
+        return max(0.0, min(100.0, float(tax_type)))
+    except Exception:
+        pass
+    mult = TAX_MULT.get(tax_type, 1.0)
+    return max(0.0, min(100.0, (1.0 - mult) * 100.0))
+
+
+def tax_multiplier(entity: dict) -> float:
+    return max(0.0, 1.0 - (parse_tax_rate(entity) / 100.0))
 
 
 def parse_job(data: dict) -> dict:
@@ -59,12 +83,15 @@ def parse_job(data: dict) -> dict:
             "kind": str(p.get("kind") or "other"),
             "amount": float(p.get("amount") or 0),
             "taxType": str(p.get("taxType") or "none"),
+            "taxRate": float(p.get("taxRate") or 0),
             "schedule": str(p.get("schedule") or ""),
             "fromDate": str(p.get("fromDate") or ""),
             "toDate": str(p.get("toDate") or ""),
             "hidden": bool(p.get("hidden")),
         })
     j["payouts"] = normalized_payouts
+    j["taxRate"] = float(j.get("taxRate") or 0)
+    j["currency"] = str(j.get("currency") or "RUB").upper()
     return j
 
 
@@ -73,7 +100,7 @@ def to_monthly_net(job: dict, total_sec_month: float, now: datetime) -> float:
     rate = job["rate"]
     if rate <= 0:
         return 0
-    tax = TAX_MULT.get(str(job.get("taxType", "none")), 1.0)
+    tax = tax_multiplier(job)
     unit = job.get("rateUnit") or "month"
     sched = job.get("schedule") or "5x2"
     started_at = None
@@ -198,7 +225,7 @@ def payout_amounts(job: dict, now: datetime, started_at: date | None) -> dict[st
         total_sec = working_seconds_between(period_start, period_end, payout_sched, started_at, wf, wt, lf, lt, le, ds)
         if total_sec <= 0:
             continue
-        tax_mult = TAX_MULT.get(str(payout.get("taxType") or "none"), 1.0)
+        tax_mult = tax_multiplier(payout)
         net_amount = amount * tax_mult
         gross_amount = amount
 
@@ -283,7 +310,7 @@ def api_earned_single(job: dict, now: datetime) -> dict:
     sec_year = working_seconds_elapsed_in_year(y, mo, d, h, mi, s, sched, started_at, wf, wt, lf, lt, le, ds)
     earned_year = 12 * salary * (sec_year / total_year) if total_year > 0 else 0
 
-    tax_mult = TAX_MULT.get(str(job.get("taxType", "none")), 1.0)
+    tax_mult = tax_multiplier(job)
     gross_mult = 1.0 / tax_mult if tax_mult > 0 else 1.0
 
     payout_parts = payout_amounts(job, now.replace(tzinfo=None), started_at)

@@ -419,6 +419,17 @@
       border: 1px solid var(--border);
     }
     .counter-widget .config-form select:focus { outline: none; border-color: var(--accent); }
+    .counter-widget .config-form input {
+      width: 100%;
+      padding: 0.45rem 0.6rem;
+      font-size: 0.85rem;
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      box-sizing: border-box;
+      outline: none;
+    }
     .counter-widget .config-form .round-chk {
       display: flex;
       align-items: center;
@@ -530,7 +541,8 @@
       text-align: center;
       margin: 0.6rem 0 0.2rem;
     }
-    .zoom-sub { text-align: center; color: var(--text-muted); margin-bottom: 0.9rem; }
+    .zoom-sub { text-align: center; color: var(--text-muted); margin-bottom: 0.9rem; font-size: 0.8rem; }
+    .zoom-meta { text-align: center; color: var(--text-muted); opacity: 0.95; margin-bottom: 0.45rem; font-size: 0.95rem; font-weight: 600; }
     .measure-tools {
       display: flex;
       gap: 0.5rem;
@@ -607,9 +619,14 @@
       { id: 'vacation', label: 'Отпускные' },
       { id: 'other', label: 'Другая' },
     ];
-    const TAX_OPTIONS = [
-      { id: 'none', label: 'Уже после вычета' },
-      { id: '13', label: '13%' }, { id: '4', label: '4%' }, { id: '6', label: '6%' }, { id: '15', label: '15%' },
+    const CURRENCIES = [
+      { id: 'RUB', label: 'RUB (₽)' },
+      { id: 'USD', label: 'USD ($)' },
+      { id: 'EUR', label: 'EUR (€)' },
+      { id: 'CNY', label: 'CNY (¥)' },
+      { id: 'KZT', label: 'KZT (₸)' },
+      { id: 'BYN', label: 'BYN (Br)' },
+      { id: 'UAH', label: 'UAH (₴)' },
     ];
     const PERIODS = [
       { id: 'day', label: 'С начала дня' },
@@ -625,7 +642,7 @@
       workFrom: '09:00', workTo: '17:00', lunchFrom: '13:00', lunchTo: '14:00',
       lunchEnabled: true, daySchedules: null,
       payouts: [],
-      rate: 0, rateUnit: 'month', taxType: 'none',
+      rate: 0, rateUnit: 'month', taxRate: 0, currency: 'RUB',
     });
 
     let jobs = JSON.parse(localStorage.getItem('zp_jobs') || '[]');
@@ -636,12 +653,14 @@
         title: p?.title || '',
         kind: p?.kind || 'other',
         amount: Number(p?.amount || 0),
-        taxType: p?.taxType || 'none',
+        taxRate: Number(p?.taxRate ?? (p?.taxType === 'none' ? 0 : p?.taxType) ?? 0),
         schedule: p?.schedule || '',
         fromDate: p?.fromDate || '',
         toDate: p?.toDate || '',
         hidden: !!p?.hidden,
       })) : [];
+      m.taxRate = Number(m.taxRate ?? (m.taxType === 'none' ? 0 : m.taxType) ?? 0);
+      m.currency = String(m.currency || 'RUB').toUpperCase();
       return m;
     });
 
@@ -650,21 +669,55 @@
       jobIds: [],
       taxDisplay: 'net',
       period: 'month',
+      currency: 'RUB',
       roundRubles: true,
       measurements: [],
       activeTimer: null,
+      name: c.name ?? '',
       ...c
     }));
 
     let jobStatuses = {};
+    let fxRatesToRub = { RUB: 1 };
     let openTimerCounterIdx = null;
     let openZoomCounterIdx = null;
     let measurementSort = 'newest';
     let measurementFilter = 'all';
 
-    function formatRubles(n, roundToRubles = false) {
-      if (roundToRubles) return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.floor(n)) + ' ₽';
-      return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) + ' ₽';
+    function formatMoney(n, currency = 'RUB', roundToUnit = false) {
+      const amount = roundToUnit ? Math.floor(n) : n;
+      return new Intl.NumberFormat('ru-RU', {
+        style: 'currency',
+        currency: currency || 'RUB',
+        minimumFractionDigits: roundToUnit ? 0 : 2,
+        maximumFractionDigits: roundToUnit ? 0 : 2,
+      }).format(amount);
+    }
+
+    function toRubRate(currency) {
+      const c = String(currency || 'RUB').toUpperCase();
+      return fxRatesToRub[c] || 1;
+    }
+
+    function convertCurrency(amount, fromCurrency, toCurrency) {
+      const from = String(fromCurrency || 'RUB').toUpperCase();
+      const to = String(toCurrency || 'RUB').toUpperCase();
+      if (from === to) return amount;
+      return amount * (toRubRate(from) / toRubRate(to));
+    }
+
+    async function loadFxRates() {
+      try {
+        const res = await fetch('https://www.cbr-xml-daily.ru/daily_json.js');
+        const data = await res.json();
+        const valute = data?.Valute || {};
+        const rates = { RUB: 1 };
+        Object.keys(valute).forEach(code => {
+          const v = valute[code];
+          if (v?.Value && v?.Nominal) rates[code.toUpperCase()] = Number(v.Value) / Number(v.Nominal);
+        });
+        fxRatesToRub = { ...fxRatesToRub, ...rates };
+      } catch (_) {}
     }
 
     function formatDate(s) {
@@ -691,8 +744,8 @@
 
     function formatRate(job) {
       const u = RATE_UNITS.find(x => x.id === job.rateUnit)?.label || job.rateUnit;
-      const t = job.taxType === 'none' ? '' : ` (${job.taxType}%)`;
-      return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(job.rate) + ' ₽/' + u + t;
+      const t = Number(job.taxRate || 0) > 0 ? ` (${Number(job.taxRate || 0)}%)` : '';
+      return `${formatMoney(Number(job.rate || 0), job.currency || 'RUB', false)}/${u}${t}`;
     }
 
     function escapeAttr(s) {
@@ -710,7 +763,7 @@
 
     function payoutSummaryHtml(p) {
       const amount = new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(p.amount || 0));
-      const tax = p.taxType === 'none' ? 'без доп. вычета' : `налог ${p.taxType}%`;
+      const tax = Number(p.taxRate || 0) > 0 ? `налог ${Number(p.taxRate || 0)}%` : 'без доп. вычета';
       const hidden = p.hidden ? ' · скрыта' : '';
       return `<strong>${escapeAttr(payoutLabel(p.kind))}</strong>${p.title ? ` — ${escapeAttr(p.title)}` : ''} · ${amount} ₽ · ${escapeAttr(tax)} · ${escapeAttr(scheduleLabel(p.schedule))} · ${escapeAttr(p.fromDate || '—')} — ${escapeAttr(p.toDate || '—')}<span class="muted">${hidden}</span>`;
     }
@@ -720,7 +773,7 @@
         title: payout.title || '',
         kind: payout.kind || 'other',
         amount: Number(payout.amount || 0),
-        taxType: payout.taxType || 'none',
+        taxRate: Number(payout.taxRate || 0),
         schedule: payout.schedule || '',
         fromDate: payout.fromDate || '',
         toDate: payout.toDate || '',
@@ -746,7 +799,7 @@
               <div class="field"><label>Тип выплаты</label><select name="payout_kind">${PAYOUT_KINDS.map(k => `<option value="${k.id}" ${p.kind === k.id ? 'selected' : ''}>${k.label}</option>`).join('')}</select></div>
               <div class="field"><label>Название</label><input type="text" name="payout_title" value="${escapeAttr(p.title)}" placeholder="Например, KPI март"></div>
               <div class="field"><label>Сумма</label><input type="number" name="payout_amount" min="0" step="0.01" value="${p.amount || ''}" placeholder="0"></div>
-              <div class="field"><label>Налог</label><select name="payout_tax">${TAX_OPTIONS.map(t => `<option value="${t.id}" ${p.taxType === t.id ? 'selected' : ''}>${t.label}</option>`).join('')}</select></div>
+              <div class="field"><label>Налог, %</label><input type="number" name="payout_tax_rate" min="0" max="100" step="0.01" value="${Number(p.taxRate || 0)}" placeholder="0"></div>
               <div class="field"><label>График выплаты</label><select name="payout_schedule"><option value="" ${!p.schedule ? 'selected' : ''}>Наследовать от работы</option>${SCHEDULES.map(s => `<option value="${s.id}" ${p.schedule === s.id ? 'selected' : ''}>${s.label}</option>`).join('')}</select></div>
               <div class="field"><label>Период выплаты</label><div class="field-row"><input type="date" name="payout_from" value="${p.fromDate}"><span>–</span><input type="date" name="payout_to" value="${p.toDate}"></div></div>
               <div class="field full row-actions">
@@ -799,7 +852,8 @@
             <div class="field full chk-only"><div class="chk-row"><input type="checkbox" name="useDaySchedules" ${useDaySchedules ? 'checked' : ''}><span class="chk-label">Разное время по дням (5×2)</span></div></div>
             <div class="field full day-schedules-block" style="display:${useDaySchedules ? 'block' : 'none'}"><div class="day-schedules">${dayRows}</div></div>
             <div class="field"><label>Ставка</label><div class="field-row"><input type="number" class="rate-input" name="rate" value="${job.rate || ''}" min="0" step="0.01" placeholder="0"><select name="rateUnit">${RATE_UNITS.map(u => `<option value="${u.id}" ${job.rateUnit === u.id ? 'selected' : ''}>${u.label}</option>`).join('')}</select></div></div>
-            <div class="field"><label>Налог</label><select name="taxType">${TAX_OPTIONS.map(t => `<option value="${t.id}" ${job.taxType === t.id ? 'selected' : ''}>${t.label}</option>`).join('')}</select></div>
+            <div class="field"><label>Налог, %</label><input type="number" name="taxRate" min="0" max="100" step="0.01" value="${Number(job.taxRate || 0)}" placeholder="0"></div>
+            <div class="field"><label>Валюта</label><select name="currency">${CURRENCIES.map(c => `<option value="${c.id}" ${(job.currency || 'RUB') === c.id ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
             <div class="field full">
               <label>Допвыплаты</label>
               <div class="payouts-block">
@@ -818,7 +872,7 @@
         title: row.querySelector('[name=payout_title]')?.value?.trim() || '',
         kind: row.querySelector('[name=payout_kind]')?.value || 'other',
         amount: parseFloat(String(row.querySelector('[name=payout_amount]')?.value || '0').replace(',', '.')) || 0,
-        taxType: row.querySelector('[name=payout_tax]')?.value || 'none',
+        taxRate: parseFloat(String(row.querySelector('[name=payout_tax_rate]')?.value || '0').replace(',', '.')) || 0,
         schedule: row.querySelector('[name=payout_schedule]')?.value || '',
         fromDate: row.querySelector('[name=payout_from]')?.value || '',
         toDate: row.querySelector('[name=payout_to]')?.value || '',
@@ -911,7 +965,7 @@
           row.querySelector('[name=payout_kind]').value = data.kind || 'other';
           row.querySelector('[name=payout_title]').value = data.title || '';
           row.querySelector('[name=payout_amount]').value = data.amount || '';
-          row.querySelector('[name=payout_tax]').value = data.taxType || 'none';
+          row.querySelector('[name=payout_tax_rate]').value = Number(data.taxRate || 0);
           row.querySelector('[name=payout_schedule]').value = data.schedule || '';
           row.querySelector('[name=payout_from]').value = data.fromDate || '';
           row.querySelector('[name=payout_to]').value = data.toDate || '';
@@ -1003,6 +1057,9 @@
         div.dataset.index = i;
         const periodLabel = PERIODS.find(p => p.id === cfg.period)?.label || cfg.period;
         const jobsLabel = cfg.jobIds.length === 0 ? '—' : cfg.jobIds.map(id => jobs[id]?.name || `Работа ${id + 1}`).join(', ');
+        const widgetTitle = (cfg.name && String(cfg.name).trim())
+          ? escapeAttr(cfg.name)
+          : `${jobsLabel} · ${periodLabel}`;
         const badge = cfg.activeTimer ? `<span class="live-badge ${cfg.activeTimer.paused ? 'paused' : 'active'}">${cfg.activeTimer.paused ? 'Пауза' : 'Таймер'}</span>` : '';
         div.innerHTML = `
           ${badge}
@@ -1010,7 +1067,7 @@
           <button class="expand-btn" data-expand="${i}" title="Открыть крупно">⛶</button>
           <button class="timer-btn" data-timer="${i}" title="Секундомер">▶</button>
           <div class="value" data-value="${i}">0 ₽</div>
-          <div class="label">${periodLabel} · ${jobsLabel}</div>
+          <div class="label">${widgetTitle}</div>
           <div class="label-tax">${cfg.taxDisplay === 'gross' ? 'До вычетов' : 'После вычетов'}</div>
           <div class="config-form">
             <div class="cfg-section">
@@ -1022,7 +1079,12 @@
               <div class="cfg-row">
                 <div class="cfg-field"><select data-period="${i}">${PERIODS.map(p => `<option value="${p.id}" ${cfg.period === p.id ? 'selected' : ''}>${p.label}</option>`).join('')}</select></div>
                 <div class="cfg-field"><select data-tax="${i}"><option value="net" ${cfg.taxDisplay === 'net' ? 'selected' : ''}>После вычета</option><option value="gross" ${cfg.taxDisplay === 'gross' ? 'selected' : ''}>До вычета</option></select></div>
+                <div class="cfg-field"><select data-currency="${i}">${CURRENCIES.map(c => `<option value="${c.id}" ${(cfg.currency || 'RUB') === c.id ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
               </div>
+            </div>
+            <div class="cfg-section">
+              <div class="cfg-label">Название виджета</div>
+              <input type="text" data-counter-name="${i}" value="${escapeAttr(cfg.name || '')}" placeholder="${jobsLabel} · ${periodLabel}" />
             </div>
             <div class="cfg-section">
               <label class="round-chk"><input type="checkbox" data-round="${i}" ${cfg.roundRubles !== false ? 'checked' : ''}> Округлять до рублей</label>
@@ -1039,7 +1101,12 @@
       if (jobList.length === 0) return Promise.resolve({ value: 0, isWorking: false });
       return fetchEarnedBatch(jobList).then(results => {
         const key = cfg.taxDisplay === 'gross' ? `earned_gross_${cfg.period}` : `earned_${cfg.period}`;
-        const value = results.reduce((s, r) => s + (r[key] || 0), 0);
+        const value = results.reduce((s, r, idx) => {
+          const fromCurrency = jobList[idx]?.currency || 'RUB';
+          const toCurrency = cfg.currency || 'RUB';
+          const converted = convertCurrency((r[key] || 0), fromCurrency, toCurrency);
+          return s + converted;
+        }, 0);
         const isWorking = results.some(r => r.is_working_now);
         return { value, isWorking };
       });
@@ -1130,6 +1197,7 @@
         endedAt: new Date().toISOString(),
         totalMs: Number(t.elapsedMs || 0),
         earned: Number(t.elapsedMoney || 0),
+        currency: cfg.currency || 'RUB',
       };
       cfg.measurements = [rec, ...(cfg.measurements || [])];
       cfg.activeTimer = null;
@@ -1163,7 +1231,7 @@
       const cfg = counters[counterIdx];
       const periodLabel = PERIODS.find(p => p.id === cfg?.period)?.label || cfg?.period || '—';
       const jobsLabel = (cfg?.jobIds || []).length === 0 ? '—' : cfg.jobIds.map(id => jobs[id]?.name || `Работа ${id + 1}`).join(', ');
-      const title = `${jobsLabel} · ${periodLabel}`;
+      const title = (cfg?.name && String(cfg.name).trim()) ? cfg.name : `${jobsLabel} · ${periodLabel}`;
       const titleEl = document.getElementById('zoomModalTitle');
       if (titleEl) titleEl.textContent = title;
       renderZoomModal();
@@ -1201,7 +1269,7 @@
         <div class="timer-live">
           <input class="name" id="timerTitleInput" value="${escapeAttr(t.title || '')}" placeholder="Название">
           <div class="time" id="timerLiveTime">${formatDuration(totalMs)}</div>
-          <div class="money" id="timerLiveMoney">${formatRubles(earned, false)}</div>
+          <div class="money" id="timerLiveMoney">${formatMoney(earned, cfg.currency || 'RUB', false)}</div>
           <div class="row">
             ${t.paused ? '<button class="modal-btn" id="timerPlayBtn">▶ Плей</button>' : '<button class="modal-btn" id="timerPauseBtn">⏸ Пауза</button>'}
             <button class="modal-btn danger" id="timerStopBtn">■ Стоп и сохранить</button>
@@ -1229,7 +1297,7 @@
       const timeEl = document.getElementById('timerLiveTime');
       const moneyEl = document.getElementById('timerLiveMoney');
       if (timeEl) timeEl.textContent = formatDuration(activeTimerTotalMs(cfg.activeTimer));
-      if (moneyEl) moneyEl.textContent = formatRubles(getLiveTimerMoney(cfg, value), false);
+      if (moneyEl) moneyEl.textContent = formatMoney(getLiveTimerMoney(cfg, value), cfg.currency || 'RUB', false);
     }
 
     function measurementItemHtml(m) {
@@ -1237,7 +1305,7 @@
         <div class="measure-item" data-mid="${escapeAttr(m.id)}">
           <div class="line"><strong>${escapeAttr(m.title || 'Замер')}</strong></div>
           <div class="line">🕒 ${formatDateTime(m.startedAt)} — ${formatDateTime(m.endedAt)}</div>
-          <div class="line">⏱ ${formatDuration(m.totalMs || 0)} · 💰 ${formatRubles(Number(m.earned || 0), false)}</div>
+          <div class="line">⏱ ${formatDuration(m.totalMs || 0)} · 💰 ${formatMoney(Number(m.earned || 0), m.currency || 'RUB', false)}</div>
           <div class="actions">
             <button class="modal-btn edit-measure-btn">Имя</button>
             <button class="modal-btn continue-measure-btn">Продолжить</button>
@@ -1271,19 +1339,21 @@
       ensureTimerState(cfg);
       const { value } = await getCounterValue(cfg);
       const periodLabel = PERIODS.find(p => p.id === cfg.period)?.label || cfg.period;
+      const jobsLabel = (cfg.jobIds || []).length === 0 ? '—' : cfg.jobIds.map(id => jobs[id]?.name || `Работа ${id + 1}`).join(', ');
       const displayed = getDisplayedMeasurements(cfg);
       const history = displayed.map(measurementItemHtml).join('') || '<div class="measure-item">Пока нет замеров</div>';
       const active = cfg.activeTimer ? `
         <div class="measure-item">
           <div class="line"><strong>Текущий замер: ${escapeAttr(cfg.activeTimer.title || 'Замер')}</strong></div>
-          <div class="line">⏱ ${formatDuration(activeTimerTotalMs(cfg.activeTimer))} · 💰 ${formatRubles(getLiveTimerMoney(cfg, value), false)}</div>
+          <div class="line">⏱ ${formatDuration(activeTimerTotalMs(cfg.activeTimer))} · 💰 ${formatMoney(getLiveTimerMoney(cfg, value), cfg.currency || 'RUB', false)}</div>
           <div class="actions">
             ${cfg.activeTimer.paused ? '<button class="modal-btn" id="zoomActivePlay">▶ Плей</button>' : '<button class="modal-btn" id="zoomActivePause">⏸ Пауза</button>'}
             <button class="modal-btn danger" id="zoomActiveStop">■ Стоп</button>
           </div>
         </div>` : '';
       body.innerHTML = `
-        <div class="zoom-value">${formatRubles(value, cfg.roundRubles !== false)}</div>
+        <div class="zoom-value">${formatMoney(value, cfg.currency || 'RUB', cfg.roundRubles !== false)}</div>
+        <div class="zoom-meta">${escapeAttr(jobsLabel)}</div>
         <div class="zoom-sub">${periodLabel} · ${cfg.taxDisplay === 'gross' ? 'До вычета' : 'После вычета'}</div>
         <div class="row" style="display:flex;justify-content:center;margin-bottom:0.8rem;">
           <button class="modal-btn" id="zoomStartTimer">▶ Добавить секундомер</button>
@@ -1347,7 +1417,7 @@
     }
 
     const animValues = {};
-    function animateCounter(idx, targetVal, roundRubles) {
+    function animateCounter(idx, targetVal, roundRubles, currency) {
       const el = document.querySelector(`.counter-widget[data-index="${idx}"] .value`);
       if (!el) return;
       const prev = animValues[idx] ?? targetVal;
@@ -1356,7 +1426,7 @@
         const from = Math.floor(prev);
         const to = Math.floor(targetVal);
         if (from === to) {
-          el.textContent = formatRubles(from, true);
+          el.textContent = formatMoney(from, currency || 'RUB', true);
           return;
         }
         const start = performance.now();
@@ -1366,12 +1436,12 @@
           const t = Math.min((now - start) / dur, 1);
           const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
           const v = from + (to - from) * eased;
-          el.textContent = formatRubles(Math.floor(v), true);
+          el.textContent = formatMoney(Math.floor(v), currency || 'RUB', true);
           if (t < 1) requestAnimationFrame(tick);
         }
         requestAnimationFrame(tick);
       } else {
-        el.textContent = formatRubles(targetVal, false);
+        el.textContent = formatMoney(targetVal, currency || 'RUB', false);
       }
     }
 
@@ -1379,7 +1449,7 @@
       counters.forEach((cfg, i) => {
         if (cfg._new || document.querySelector(`.counter-widget[data-index="${i}"]`)?.classList.contains('configuring')) return;
         getCounterValue(cfg).then(({ value, isWorking }) => {
-          animateCounter(i, value, cfg.roundRubles !== false);
+          animateCounter(i, value, cfg.roundRubles !== false, cfg.currency || 'RUB');
           const el = document.querySelector(`.counter-widget[data-index="${i}"] .value`);
           if (el) el.classList.toggle('paused', !isWorking);
         });
@@ -1401,7 +1471,10 @@
         }
       }
       if (removeIdx !== undefined) {
-        jobs.splice(+removeIdx, 1);
+        const idx = +removeIdx;
+        const name = jobs[idx]?.name || `Работа ${idx + 1}`;
+        if (!confirm(`Удалить работу "${name}"?`)) return;
+        jobs.splice(idx, 1);
         saveAndRender();
       }
     });
@@ -1456,7 +1529,8 @@
         payouts,
         rate: parseFloat(String(fd.get('rate')).replace(',', '.')) || 0,
         rateUnit: fd.get('rateUnit') || 'month',
-        taxType: fd.get('taxType') || 'none',
+        taxRate: parseFloat(String(fd.get('taxRate')).replace(',', '.')) || 0,
+        currency: String(fd.get('currency') || 'RUB').toUpperCase(),
       };
       if (idx >= jobs.length) jobs.push(job);
       else jobs[idx] = job;
@@ -1484,21 +1558,31 @@
         const jobsContainer = w.querySelector(`.jobs-list[data-jobs="${saveIdx}"]`);
         const taxSelect = w.querySelector(`select[data-tax="${saveIdx}"]`);
         const periodSelect = w.querySelector(`select[data-period="${saveIdx}"]`);
+        const currencySelect = w.querySelector(`select[data-currency="${saveIdx}"]`);
+        const nameInput = w.querySelector(`input[data-counter-name="${saveIdx}"]`);
         const roundChk = w.querySelector(`input[data-round="${saveIdx}"]`);
+        const name = String(nameInput?.value || '').trim();
         counters[saveIdx] = {
           jobIds: Array.from(jobsContainer?.querySelectorAll('input[type=checkbox]:checked') ?? []).map(cb => +cb.value).filter(id => id >= 0 && id < jobs.length),
           taxDisplay: taxSelect?.value || 'net',
           period: periodSelect?.value || 'month',
+          currency: currencySelect?.value || 'RUB',
           roundRubles: roundChk?.checked ?? true,
           measurements: Array.isArray(prev.measurements) ? prev.measurements : [],
           activeTimer: prev.activeTimer || null,
+          name,
         };
         delete counters[saveIdx]._new;
         w.classList.remove('configuring', 'new-counter');
         saveAndRender();
       }
       if (delIdx !== undefined) {
-        counters.splice(+delIdx, 1);
+        const idx = +delIdx;
+        const cfg = counters[idx] || {};
+        const autoName = (cfg.jobIds || []).length === 0 ? `Виджет ${idx + 1}` : cfg.jobIds.map(id => jobs[id]?.name || `Работа ${id + 1}`).join(', ');
+        const title = (cfg.name && String(cfg.name).trim()) ? cfg.name : autoName;
+        if (!confirm(`Удалить виджет "${title}"?`)) return;
+        counters.splice(idx, 1);
         saveAndRender();
       }
     });
@@ -1526,7 +1610,7 @@
     };
 
     document.getElementById('addCounterBtn').onclick = () => {
-      counters.push({ jobIds: [], taxDisplay: 'net', period: 'month', roundRubles: true, measurements: [], activeTimer: null, _new: true });
+      counters.push({ jobIds: [], taxDisplay: 'net', period: 'month', currency: 'RUB', roundRubles: true, measurements: [], activeTimer: null, name: '', _new: true });
       saveAndRender();
       const w = document.querySelector(`.counter-widget[data-index="${counters.length - 1}"]`);
       if (w) w.classList.add('configuring');
@@ -1547,6 +1631,7 @@
     renderJobs();
     renderCounters();
     updateJobStatuses();
+    loadFxRates().then(() => tickCounters());
     setInterval(updateJobStatuses, 1000);
     setInterval(tickCounters, 1000);
   </script>
