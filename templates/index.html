@@ -1982,7 +1982,7 @@
         preAmountText: `заработано`,
         amountText,
         subtitle: `${periodLabel} · ${cfg.taxDisplay === 'gross' ? 'до вычета' : 'после вычета'}`,
-        accentText: jobsLabel && jobsLabel !== '—' ? jobsLabel : '',
+        accentText: jobsLabel || '—',
       });
       await shareBlobOrFallback(blob, title, `${title}\nСейчас по счётчику: ${amountText}`);
     }
