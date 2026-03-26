@@ -1838,6 +1838,16 @@
       ctx.lineWidth = 2;
       ctx.strokeRect(60, 60, 1080, 510);
 
+      // Лёгкий рельефный watermark справа.
+      ctx.save();
+      ctx.globalAlpha = 0.06;
+      ctx.fillStyle = '#e8e8ec';
+      ctx.font = '700 260px "JetBrains Mono", monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText('ZP', 1070, 430);
+      ctx.restore();
+      ctx.textAlign = 'left';
+
       ctx.fillStyle = '#e8e8ec';
       ctx.font = '600 34px Manrope, Arial, sans-serif';
       ctx.fillText(title || 'zp-widget', 110, 150);
@@ -1854,8 +1864,9 @@
 
       const hasPreAmount = !!preAmountText;
       const hasAccent = !!accentText;
-      const subtitleY = hasPreAmount ? (hasAccent ? 410 : 430) : (hasAccent ? 370 : 430);
+      const subtitleY = hasPreAmount ? (hasAccent ? 410 : 450) : (hasAccent ? 370 : 430);
       const accentY = hasPreAmount ? 470 : 440;
+      const brandY = hasAccent ? 525 : (hasPreAmount ? 510 : 525);
 
       ctx.fillStyle = '#888';
       ctx.font = '500 30px Manrope, Arial, sans-serif';
@@ -1867,7 +1878,7 @@
 
       ctx.fillStyle = '#888';
       ctx.font = '500 20px Manrope, Arial, sans-serif';
-      ctx.fillText('zp-widget', 110, 525);
+      ctx.fillText('zp-widget', 110, brandY);
 
       return await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     }
@@ -1959,7 +1970,7 @@
         preAmountText: `заработано`,
         amountText,
         subtitle: `${periodLabel} · ${cfg.taxDisplay === 'gross' ? 'до вычета' : 'после вычета'}`,
-        accentText: jobsLabel,
+        accentText: jobsLabel && jobsLabel !== '—' ? `Работодатель: ${jobsLabel}` : '',
       });
       await shareBlobOrFallback(blob, 'Поделиться виджетом', `Сейчас по счётчику: ${amountText}`);
     }
