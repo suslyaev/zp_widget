@@ -1,7 +1,8 @@
-const CACHE_NAME = "zp-widget-cache-v3";
+const CACHE_NAME = "zp-widget-cache-v4";
 const APP_SHELL_URL = "/";
 const STATIC_ASSETS = [
   "/",
+  "/index.html",
   "/static/site.webmanifest",
   "/static/icon.svg",
   "/sw.js",
@@ -10,13 +11,13 @@ const STATIC_ASSETS = [
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    // Cache assets individually so one failed request does not break offline shell.
-    await Promise.allSettled(
-      STATIC_ASSETS.map(async (url) => {
+    // Safari-friendly install: avoid Promise.allSettled and tolerate single-asset failures.
+    for (const url of STATIC_ASSETS) {
+      try {
         const res = await fetch(url, { cache: "reload" });
-        if (res.ok) await cache.put(url, res.clone());
-      })
-    );
+        if (res && res.ok) await cache.put(url, res.clone());
+      } catch (_) {}
+    }
   })());
   self.skipWaiting();
 });
@@ -47,7 +48,10 @@ self.addEventListener("fetch", (event) => {
   if (req.mode === "navigate") {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
-      const cachedShell = await cache.match(APP_SHELL_URL);
+      const cachedShell =
+        (await cache.match(req, { ignoreSearch: true })) ||
+        (await cache.match(APP_SHELL_URL, { ignoreSearch: true })) ||
+        (await cache.match("/index.html", { ignoreSearch: true }));
       if (cachedShell) {
         // Refresh app shell in background when network is available.
         event.waitUntil((async () => {
@@ -91,6 +95,12 @@ self.addEventListener("fetch", (event) => {
 
   // Default: network first with shell fallback.
   event.respondWith(
-    fetch(req).catch(() => caches.match(req).then((r) => r || caches.match(APP_SHELL_URL)))
+    fetch(req).catch(() =>
+      caches.match(req, { ignoreSearch: true }).then((r) =>
+        r ||
+        caches.match(APP_SHELL_URL, { ignoreSearch: true }) ||
+        caches.match("/index.html", { ignoreSearch: true })
+      )
+    )
   );
 });
