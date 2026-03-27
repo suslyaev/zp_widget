@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 import json
 import os
 from urllib.request import urlopen, Request
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_from_directory
 
 MSK = ZoneInfo("Europe/Moscow")
 
@@ -425,6 +425,12 @@ def index():
         "index.html",
         yandex_metrika_id=parse_metrika_id(os.getenv("YANDEX_METRIKA_ID")),
     )
+
+
+@app.route("/sw.js")
+def service_worker():
+    # Serve SW from site root so it can control "/" scope for full offline PWA.
+    return send_from_directory("static", "sw.js", mimetype="application/javascript")
 
 
 @app.route("/api/holidays", methods=["GET"])

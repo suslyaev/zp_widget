@@ -1,10 +1,10 @@
-const CACHE_NAME = "zp-widget-cache-v2";
+const CACHE_NAME = "zp-widget-cache-v3";
 const APP_SHELL_URL = "/";
 const STATIC_ASSETS = [
   "/",
   "/static/site.webmanifest",
   "/static/icon.svg",
-  "/static/sw.js",
+  "/sw.js",
 ];
 
 self.addEventListener("install", (event) => {
