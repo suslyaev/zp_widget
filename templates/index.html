@@ -29,6 +29,35 @@
   <link rel="icon" type="image/svg+xml" href="/static/icon.svg">
   <link rel="shortcut icon" href="/static/icon.svg">
   <link rel="apple-touch-icon" href="/static/icon.svg">
+  <style>
+    html, body { background: #0f0f12; margin: 0; }
+    #appPreloader {
+      position: fixed;
+      inset: 0;
+      background: #0f0f12;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      opacity: 1;
+      transition: opacity 0.25s ease;
+    }
+    #appPreloader.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #appPreloader .spinner {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: 3px solid rgba(232, 232, 236, 0.2);
+      border-top-color: #00d4aa;
+      animation: preload-spin 0.9s linear infinite;
+    }
+    @keyframes preload-spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Manrope:wght@400;600;700&display=swap" rel="stylesheet">
@@ -732,6 +761,7 @@
   </style>
 </head>
 <body>
+  <div id="appPreloader" aria-hidden="true"><div class="spinner"></div></div>
   {% if yandex_metrika_id %}
   <noscript><div><img src="https://mc.yandex.ru/watch/{{ yandex_metrika_id }}" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
   {% endif %}
@@ -2447,6 +2477,12 @@
       const el = document.getElementById('currentDatetime');
       if (el) el.textContent = new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
+    function hidePreloader() {
+      const p = document.getElementById('appPreloader');
+      if (!p) return;
+      p.classList.add('hidden');
+      setTimeout(() => p.remove(), 300);
+    }
     updateDateTime();
     setInterval(updateDateTime, 1000);
 
@@ -2454,12 +2490,14 @@
     renderCounters();
     updateAddCounterVisibility();
     updateJobStatuses();
-    loadFxRates().then(() => tickCounters());
+    loadFxRates().then(() => tickCounters()).finally(() => hidePreloader());
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/static/sw.js').catch(() => {});
       });
     }
+    window.addEventListener('load', hidePreloader);
+    setTimeout(hidePreloader, 7000);
     setInterval(updateJobStatuses, 1000);
     setInterval(tickCounters, 1000);
   </script>
